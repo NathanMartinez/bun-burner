@@ -2,7 +2,7 @@
 
 A local Bun/TypeScript bridge to Bitburner's Remote API. The intended product connects an external code editor to the game with bidirectional file synchronization that preserves original source files.
 
-**Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Automatic synchronization and user-facing transfer commands are not implemented yet.
+**Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Opt-in two-way source synchronization is implemented on this development branch. Deletion propagation and manual transfer commands remain deferred.
 
 ## Run
 
@@ -19,7 +19,7 @@ In Bitburner, open **Options → Remote API**, use hostname `127.0.0.1` and port
 
 Bun loads `.env` automatically. `BUN_BURNER_HOST` defaults to `127.0.0.1` and `BUN_BURNER_PORT` to `12525`; no file is required for these defaults. `.env` is ignored by Git. On PowerShell, use `Copy-Item .env.example .env`. Restart after changes and match the game settings to the chosen port. Invalid settings fail at startup. TLS/WSS is not configured.
 
-By default, the bridge listens on `ws://127.0.0.1:12525`. Each connection triggers one `getFileNames` request for `home` and prints the returned filenames. It does not write, delete, or execute game files. Only run one bridge instance on this port; an address-in-use error usually means another instance is still running.
+By default, the bridge listens on `ws://127.0.0.1:12525`. Each connection triggers one `getFileNames` request for `home` and prints the returned filenames. With sync disabled (the default), it does not write, delete, or execute game files. Enabling sync allows source uploads and local downloads; it never deletes or executes game files. Only run one bridge instance on this port; an address-in-use error usually means another instance is still running.
 
 ## Current functionality
 
@@ -67,6 +67,7 @@ The contract follows the [Bitburner 3.0.1 implementation](https://github.com/bit
 src/
   index.ts             Bun server, connection lifecycle, frame decoding
   config.ts            Validated host and port settings
+  sync/                Reconciliation, local storage, Remote API adapter, polling
   rpc/
     client.ts          Generic request lifecycle and response handling
     types.ts           Transport and pending-request contracts
@@ -86,34 +87,51 @@ bun run typecheck
 bun test
 ```
 
-The twelve local tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
+The local tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
+
+A real local WebSocket test verifies uploads and downloads through the typed RPC layer using a simulated game and disposable directories. Sync also has tests for conflicts, missing files, restart baselines, stale reads, failed writes, locking, path guards, and source-text preservation. Live game synchronization has not been tested.
 
 A live `getFileNames` round trip against Bitburner succeeded, including after reconnecting with the typed API layer. File contents, metadata, and remote-error recovery have been tested with simulated responses, not live game requests. The newly completed methods, including writes and save export, have only been tested with simulated responses. No live game writes were performed.
 
 ## Feature status
 
-“Implemented” describes code available today; see **Verify** above for the distinction between live and simulated testing. “Planned” describes intended work, not available functionality.
+| Feature | Status |
+| --- | --- |
+| RPC lifecycle and all eleven typed Remote API methods | Implemented |
+| Numeric or numeric-string metadata timestamp normalization | Implemented; callers receive numbers |
+| Source-preserving two-way create/update synchronization | Implemented, opt-in |
+| Dedicated default scripts folder and custom path configuration | Implemented |
+| Local and remote polling | Implemented; sequential scans with a one-second delay |
+| Persisted content-hash baseline, conflicts, recovery copies | Implemented |
+| Workspace ownership and sequential transfers | Implemented |
+| Source filters and static symlink/path guards | Implemented |
+| Deletion/rename propagation | Deferred; missing tracked files are conflicts |
+| Native filesystem watcher, custom ignore patterns, manual transfer CLI | Deferred |
+| Dashboard, public API, editor plugins, WSS | Deferred |
 
-| Feature | Status | Notes |
-| --- | --- | --- |
-| WebSocket connection and RPC lifecycle | Implemented | Per-connection requests, responses, errors, timeouts, and disconnect cleanup |
-| Typed filename, content, and metadata reads | Implemented | Three methods listed above; successful results are validated at runtime |
-| Automatic filename listing on connection | Implemented | One request for `home`, with terminal output |
-| Raw upload with `pushFile` | Implemented API | Preserves provided filename and source text; sync workflow remains planned |
-| Bulk reads with `getAllFiles` / `getAllFileMetadata` | Implemented API | Reconciliation remains planned |
-| Manual upload/download commands | Planned | Explicit transfers before automatic sync |
-| Local file watching and game-side polling | Planned | Detect changes in both directions |
-| Conflict detection and recovery copies | Planned | Compare both sides with a persisted synchronization baseline |
-| Per-file operation queues and loop suppression | Planned | Coordinate uploads/downloads and avoid echoing our own changes |
-| Startup and reconnect reconciliation | Planned | Re-read state before resuming transfers |
-| Folder/server mappings and ignore rules | Planned | Bound sync to selected files and destinations |
-| Deletion and rename propagation | Planned, later | Require baseline history and conflict handling first |
-| Netscript definitions and React/JSX editor setup | Planned | Editor type-checking without generated deployment files |
-| Server discovery with `getAllServers` | Implemented API | Destination mapping workflow remains planned |
-| RAM calculation with `calculateRam` | Implemented API | Dashboard/reporting integration remains optional |
-| Save export with `getSaveFile` | Implemented API | Save management workflow is outside initial scope |
+## Enable file syncing
 
-The lower-level RPC transport can send arbitrary method names; the typed wrapper includes mutating methods and is not a read-only security boundary. The current application only issues the filename read on connection.
+Copy `.env.example` to `.env` if you have not already. Use the provided `scripts/` folder for a quick start, or point at an existing folder elsewhere:
+
+```dotenv
+BUN_BURNER_SYNC_ENABLED=true
+BUN_BURNER_SYNC_ROOT=./scripts
+BUN_BURNER_SYNC_SERVER=home
+```
+
+For an external workspace, set `BUN_BURNER_SYNC_ROOT=/absolute/path/to/your/game-scripts`. Relative paths are resolved from the directory where you launch the app. The folder must exist. Its contents map directly to the selected game server: `lib/example.ts` becomes `lib/example.ts` on `home`; do not add a `home/` directory unless you want it in the game path.
+
+Restart with `bun run start`, then reconnect Bitburner. The default `scripts/` folder is separate from connector code, and its contents are ignored by this repository's Git rules. `.gitkeep` only ensures the empty folder is included in a clone.
+
+The first connection copies files present on only one side. Different existing files on both sides are conflicts, with no automatic winner. Selected `.js`, `.ts`, `.jsx`, and `.tsx` files retain source text, extensions, and line endings. Hidden paths, `node_modules`, `dist`, `out`, `coverage`, and `.d.ts` files are excluded. Static symlinks are rejected. This is not a sandbox against a hostile process changing filesystem paths during a transfer.
+
+Local content must be unchanged across two scans before an upload. The engine compares content hashes, not metadata timestamps; metadata coercion therefore cannot decide which file wins. Transfers run sequentially, recheck both sides, retain observed versions, and verify the destination before saving a baseline. Polling fetches all selected source content from the game via `getAllFiles`, so this initial implementation is intended for modest script workspaces, not large telemetry archives.
+
+State and recovery copies live in `<scripts-root>/.bun-burner/`. Add that directory to your scripts repository's `.gitignore`. Recovery JSON files retain the original `filename`, `side`, and `content`. When `[sync:conflict]` appears, compare both files and the recovery copies, then make both sides match your chosen content. A later scan recognizes agreement. Tracked files missing from only one side stay conflicted; no automatic deletion or restoration occurs.
+
+A scan/transfer error pauses sync while leaving the connection open. Fix the cause and manually disconnect/reconnect to resume. Do not delete the state directory to resolve a conflict: doing so removes the common baseline. One sync connection/process may own a workspace at a time. Normal shutdown releases its lock; after a crash, inspect `<scripts-root>/.bun-burner/lock` and confirm the recorded process is no longer running before removing the stale lock.
+
+The baseline is bound to the selected server name, but the Remote API does not give this workflow an authenticated save identity. Use separate script roots for different game saves and do not connect another save to an existing workspace without reviewing both sides.
 
 ## Intended scope
 
@@ -121,7 +139,7 @@ The first synchronization target is an editor-independent local connector. Savin
 
 ### Preserve original source
 
-Transfer `.js`, `.ts`, `.jsx`, and `.tsx` files with their original names and source text in both directions. For example, local `home/dashboard.tsx` should map to `dashboard.tsx` on the game server `home`, without producing a `.js` counterpart. The exact workspace mapping remains to be implemented.
+Transfer `.js`, `.ts`, `.jsx`, and `.tsx` files with their original names and source text in both directions. For example, local `home/dashboard.tsx` should map to `dashboard.tsx` on the game server `home`, without producing a `.js` counterpart. The folder mapping is configured as described above.
 
 Bitburner supports TypeScript and React/JSX natively, as documented in the [3.0.1 TypeScript and React guide](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/Documentation/doc/en/programming/typescript_react.md). The planned sync engine will not require an external transpilation or bundling step. The game still handles source execution internally.
 
@@ -129,7 +147,7 @@ External editor support should provide Netscript declarations, compatible React 
 
 ### Reconcile changes and preserve conflicts
 
-The planned engine records a last-synchronized content hash for each server and filename. Content comparison determines changes; timestamps alone do not decide which version wins.
+The engine records a last-synchronized content hash for each server and filename. Content comparison determines changes; timestamps alone do not decide which version wins.
 
 | State relative to the synchronization baseline | Intended action |
 | --- | --- |
@@ -141,7 +159,7 @@ The planned engine records a last-synchronized content hash for each server and 
 
 On first connection, different files on both sides have no common baseline and must not be silently overwritten. Missing files require separate creation/deletion handling: absence alone is not permission to delete the other copy. Rename and deletion propagation come after these rules are tested.
 
-Planned safeguards include per-file queues shared by both directions, debounced stable local reads, content-based suppression of self-generated changes, persistent state, and recovery copies. Reconnection must invalidate stale transfer decisions and trigger a new comparison. A timed-out write has an unknown outcome, so read back before deciding whether to retry. Multiple game connections must not simultaneously own the same local destination.
+The initial engine serializes all transfers, requires stable local reads, suppresses unchanged content, persists state, and keeps observed-version recovery copies. Reconnection must invalidate stale transfer decisions and trigger a new comparison. A timed-out write has an unknown outcome, so read back before deciding whether to retry. Multiple game connections must not simultaneously own the same local destination.
 
 ### API concurrency limits
 
@@ -157,16 +175,12 @@ Queues can prevent overlapping operations within this connector, but cannot make
 - Save management and remote debugging integrations.
 - An editor-specific extension; the initial interface will operate on local files.
 
-## Incremental roadmap
+## Next steps
 
-1. Complete the typed Remote API and corresponding tests — implemented; remaining live method checks require an appropriate test environment.
-2. Add explicit source-preserving upload/download operations.
-3. Build a reconciliation planner that reports actions and conflicts without writing.
-4. Add queued transfers, verification, and persistent recovery state.
-5. Add local watching and game-side polling.
-6. Add deletion/rename handling and external editor type setup.
-
-Each step should remain independently reviewable. Live testing of writes should use explicitly selected disposable game files; existing user scripts are not test fixtures.
+- Validate sync with explicitly selected disposable game files before using valuable scripts.
+- Improve scanning efficiency and add configurable ignore patterns as needed.
+- Add deletion/rename workflows after their conflict semantics are tested.
+- Keep dashboards, frontend APIs, and editor integrations outside the initial sync milestone.
 
 ## Extending the base engine
 
