@@ -2,7 +2,7 @@
 
 A local Bun/TypeScript bridge to Bitburner's Remote API. The intended product connects an external code editor to the game with bidirectional file synchronization that preserves original source files.
 
-**Current status:** the RPC foundation and three typed read methods are implemented. Automatic synchronization and file uploads are not implemented yet.
+**Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Automatic synchronization and user-facing transfer commands are not implemented yet.
 
 ## Run
 
@@ -10,12 +10,16 @@ Validated with Bun 1.4.2, TypeScript 7.0.2, and Bitburner 3.0.1.
 
 ```bash
 bun install --frozen-lockfile
+# Optional: copy the defaults, then edit .env if needed.
+cp .env.example .env
 bun run start
 ```
 
 In Bitburner, open **Options → Remote API**, use hostname `127.0.0.1` and port `12525`, then connect using WebSocket (`ws`, not `wss`).
 
-The bridge listens on `ws://127.0.0.1:12525`. Each connection triggers one `getFileNames` request for `home` and prints the returned filenames. It does not write, delete, or execute game files. Only run one bridge instance on this port; an address-in-use error usually means another instance is still running.
+Bun loads `.env` automatically. `BUN_BURNER_HOST` defaults to `127.0.0.1` and `BUN_BURNER_PORT` to `12525`; no file is required for these defaults. `.env` is ignored by Git. On PowerShell, use `Copy-Item .env.example .env`. Restart after changes and match the game settings to the chosen port. Invalid settings fail at startup. TLS/WSS is not configured.
+
+By default, the bridge listens on `ws://127.0.0.1:12525`. Each connection triggers one `getFileNames` request for `home` and prints the returned filenames. It does not write, delete, or execute game files. Only run one bridge instance on this port; an address-in-use error usually means another instance is still running.
 
 ## Current functionality
 
@@ -33,6 +37,21 @@ The bridge listens on `ws://127.0.0.1:12525`. Each connection triggers one `getF
 | `getFile` | `{ server: string, filename: string }` | `string` |
 | `getFileMetadata` | `{ server: string, filename: string }` | `{ filename: string, atime: number, btime: number, mtime: number }` |
 
+The wrapper also exposes:
+
+| Method | Parameters | Result |
+| --- | --- | --- |
+| `pushFile` | `{ server, filename, content }` (strings) | `"OK"` |
+| `deleteFile` | `{ server, filename }` (strings) | `"OK"` |
+| `getAllFiles` | `{ server: string }` | `{ filename: string, content: string }[]` |
+| `getAllFileMetadata` | `{ server: string }` | `FileMetadata[]` |
+| `calculateRam` | `{ server, filename }` (strings) | `number` |
+| `getDefinitionFile` | None | `string` |
+| `getSaveFile` | None | `{ identifier: string, binary: boolean, save: string }` |
+| `getAllServers` | None | `{ hostname: string, hasAdminRights: boolean, purchasedByPlayer: boolean }[]` |
+
+`pushFile` and `deleteFile` mutate game files when explicitly called. The sample server does not call them. Parameterless methods are called without a second argument, for example `await bitburner.call("getDefinitionFile")`.
+
 The generic `RpcClient.call()` intentionally returns `Promise<unknown>`. Use `BitburnerClient.call()` for method-specific parameter checks, inferred result types, and runtime result validation. For example, with a connected `BitburnerClient` named `bitburner`:
 
 ```ts
@@ -47,14 +66,17 @@ The contract follows the [Bitburner 3.0.1 implementation](https://github.com/bit
 ```text
 src/
   index.ts             Bun server, connection lifecycle, frame decoding
+  config.ts            Validated host and port settings
   rpc/
     client.ts          Generic request lifecycle and response handling
     types.ts           Transport and pending-request contracts
   bitburner/
-    client.ts          Typed method map and result validators
+    client.ts          Typed calls and result validators
+    types.ts           Documented Remote API contracts
 tests/
   client.test.ts       RPC lifecycle tests
   bitburner.test.ts    API validation and type checks
+  config.test.ts       Listener configuration checks
 ```
 
 ## Verify
@@ -64,9 +86,9 @@ bun run typecheck
 bun test
 ```
 
-The seven local tests cover response ordering, errors, disconnects, send and serialization failures, malformed envelopes, and typed result validation. Compile-time checks reject unknown method names and missing required parameters.
+The twelve local tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
 
-A live `getFileNames` round trip against Bitburner succeeded, including after reconnecting with the typed API layer. File contents, metadata, and remote-error recovery have been tested with simulated responses, not live game requests. The timeout is implemented but does not yet have a dedicated timing test.
+A live `getFileNames` round trip against Bitburner succeeded, including after reconnecting with the typed API layer. File contents, metadata, and remote-error recovery have been tested with simulated responses, not live game requests. The newly completed methods, including writes and save export, have only been tested with simulated responses. No live game writes were performed.
 
 ## Feature status
 
@@ -77,8 +99,8 @@ A live `getFileNames` round trip against Bitburner succeeded, including after re
 | WebSocket connection and RPC lifecycle | Implemented | Per-connection requests, responses, errors, timeouts, and disconnect cleanup |
 | Typed filename, content, and metadata reads | Implemented | Three methods listed above; successful results are validated at runtime |
 | Automatic filename listing on connection | Implemented | One request for `home`, with terminal output |
-| Upload original source with `pushFile` | Planned | Preserve filename, extension, and source text |
-| Bulk reads with `getAllFiles` / `getAllFileMetadata` | Planned | Inventory and reconciliation support |
+| Raw upload with `pushFile` | Implemented API | Preserves provided filename and source text; sync workflow remains planned |
+| Bulk reads with `getAllFiles` / `getAllFileMetadata` | Implemented API | Reconciliation remains planned |
 | Manual upload/download commands | Planned | Explicit transfers before automatic sync |
 | Local file watching and game-side polling | Planned | Detect changes in both directions |
 | Conflict detection and recovery copies | Planned | Compare both sides with a persisted synchronization baseline |
@@ -87,11 +109,11 @@ A live `getFileNames` round trip against Bitburner succeeded, including after re
 | Folder/server mappings and ignore rules | Planned | Bound sync to selected files and destinations |
 | Deletion and rename propagation | Planned, later | Require baseline history and conflict handling first |
 | Netscript definitions and React/JSX editor setup | Planned | Editor type-checking without generated deployment files |
-| Server discovery with `getAllServers` | Planned | Support explicit destination mappings |
-| RAM reporting with `calculateRam` | Optional future work | Not required for synchronization |
-| Save export with `getSaveFile` | Outside initial scope | Separate from source-file synchronization |
+| Server discovery with `getAllServers` | Implemented API | Destination mapping workflow remains planned |
+| RAM calculation with `calculateRam` | Implemented API | Dashboard/reporting integration remains optional |
+| Save export with `getSaveFile` | Implemented API | Save management workflow is outside initial scope |
 
-The lower-level RPC transport can send arbitrary method names; the three-method typed API is not a read-only security boundary. The current application only issues the filename read on connection.
+The lower-level RPC transport can send arbitrary method names; the typed wrapper includes mutating methods and is not a read-only security boundary. The current application only issues the filename read on connection.
 
 ## Intended scope
 
@@ -101,7 +123,7 @@ The first synchronization target is an editor-independent local connector. Savin
 
 Transfer `.js`, `.ts`, `.jsx`, and `.tsx` files with their original names and source text in both directions. For example, local `home/dashboard.tsx` should map to `dashboard.tsx` on the game server `home`, without producing a `.js` counterpart. The exact workspace mapping remains to be implemented.
 
-Bitburner supports TypeScript and React/JSX natively, as documented in the [3.0.1 TypeScript and React guide](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/Documentation/doc/en/programming/typescript_react.md). The connector will not require an external transpilation or bundling step. The game still handles source execution internally.
+Bitburner supports TypeScript and React/JSX natively, as documented in the [3.0.1 TypeScript and React guide](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/Documentation/doc/en/programming/typescript_react.md). The planned sync engine will not require an external transpilation or bundling step. The game still handles source execution internally.
 
 External editor support should provide Netscript declarations, compatible React globals and JSX types, and no-emit type-checking. Game scripts must use imports that resolve inside Bitburner. Arbitrary npm dependencies, Node/Bun APIs, and editor-only path aliases are not made available in the game by synchronizing source files.
 
@@ -137,7 +159,7 @@ Queues can prevent overlapping operations within this connector, but cannot make
 
 ## Incremental roadmap
 
-1. Complete the typed file API and corresponding tests.
+1. Complete the typed Remote API and corresponding tests — implemented; remaining live method checks require an appropriate test environment.
 2. Add explicit source-preserving upload/download operations.
 3. Build a reconciliation planner that reports actions and conflicts without writing.
 4. Add queued transfers, verification, and persistent recovery state.
@@ -145,3 +167,9 @@ Queues can prevent overlapping operations within this connector, but cannot make
 6. Add deletion/rename handling and external editor type setup.
 
 Each step should remain independently reviewable. Live testing of writes should use explicitly selected disposable game files; existing user scripts are not test fixtures.
+
+## Extending the base engine
+
+Public contracts and JSDoc live alongside the implementation. Add a method contract in `src/bitburner/types.ts`, its result parser in `src/bitburner/client.ts`, then valid/invalid response tests and compile-time argument checks. Keep Bun socket lifecycle code in the adapter and game-specific validation in the wrapper. Do not assume TypeScript types validate received JSON.
+
+`RpcClient` owns one connection's pending requests; its optional constructor timeout is in milliseconds (default 30,000). `disconnect()` rejects pending requests but does not close the socket. The adapter owns socket closure. A timeout never cancels remote work, and the client does not retry writes. Keep game source transfers separate from any future build command for distributing the connector.
