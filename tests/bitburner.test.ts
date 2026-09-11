@@ -1,5 +1,5 @@
 import { expect, test, expectTypeOf } from "bun:test";
-import { rejects } from "node:assert/strict";
+import { deepStrictEqual, rejects } from "node:assert/strict";
 import { RpcClient } from "../src/rpc/client.ts";
 import { BitburnerClient, type FileMetadata } from "../src/bitburner/client.ts";
 
@@ -50,4 +50,43 @@ function typeChecks(api: BitburnerClient) {
   api.call("getFile", { server: "home" });
   // @ts-expect-error Filename listings require server parameters.
   api.call("getFileNames");
+}
+
+test("remaining Remote API methods validate results and omit absent params", async () => {
+  const cases: { args: import("../src/bitburner/types.ts").RemoteCall; result: unknown; invalid: unknown }[] = [
+    { args: ["pushFile", { server: "home", filename: "a.tsx", content: "const a = <div />;" }], result: "OK", invalid: "ok" },
+    { args: ["deleteFile", { server: "home", filename: "a.tsx" }], result: "OK", invalid: true },
+    { args: ["getAllFiles", { server: "home" }], result: [{ filename: "a.tsx", content: "const a = <div />;" }], invalid: [{ filename: "a.tsx", content: 2 }] },
+    { args: ["getAllFileMetadata", { server: "home" }], result: [{ filename: "a.tsx", atime: 1, btime: 2, mtime: 3 }], invalid: [{ filename: "a.tsx", atime: "1", btime: 2, mtime: 3 }] },
+    { args: ["calculateRam", { server: "home", filename: "a.tsx" }], result: 1.6, invalid: "1.6" },
+    { args: ["getDefinitionFile"], result: "interface NS {}", invalid: {} },
+    { args: ["getSaveFile"], result: { identifier: "fixture", binary: true, save: "abc" }, invalid: { identifier: "fixture", binary: "true", save: "abc" } },
+    { args: ["getAllServers"], result: [{ hostname: "home", hasAdminRights: true, purchasedByPlayer: false }], invalid: [{ hostname: "home", hasAdminRights: true }] },
+  ];
+  for (const { args, result, invalid } of cases) {
+    const { rpc, api, sent } = fixture();
+    const response = api.call(...args);
+    const request = JSON.parse(sent[0]!);
+    expect(request.method).toBe(args[0]);
+    if (args.length === 1) expect(Object.hasOwn(request, "params")).toBe(false);
+    else expect(request.params).toEqual(args[1]);
+    rpc.handleMessage(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+    deepStrictEqual(await response, result);
+    const bad = api.call(...args);
+    rpc.handleMessage(JSON.stringify({ jsonrpc: "2.0", id: 2, result: invalid }));
+    await rejects(bad, /Invalid .* result/);
+  }
+});
+
+function completeApiTypeChecks(api: BitburnerClient) {
+  expectTypeOf(api.call("pushFile", { server: "home", filename: "a.ts", content: "" })).toEqualTypeOf<Promise<"OK">>();
+  expectTypeOf(api.call("getDefinitionFile")).toEqualTypeOf<Promise<string>>();
+  expectTypeOf(api.call("getAllServers")).toEqualTypeOf<Promise<import("../src/bitburner/types.ts").ServerInfo[]>>();
+  // @ts-expect-error Parameterless methods do not accept parameter objects.
+  api.call("getDefinitionFile", {});
+  // @ts-expect-error Writes require content.
+  api.call("pushFile", { server: "home", filename: "a.ts" });
+  const uncertainMethod = Math.random() ? "getFile" : "pushFile";
+  // @ts-expect-error A union including pushFile still requires its content parameter.
+  api.call(uncertainMethod, { server: "home", filename: "a.ts" });
 }
