@@ -4,12 +4,38 @@ A local Bun/TypeScript bridge that synchronizes original source files between an
 
 **Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Opt-in two-way source synchronization is implemented on this development branch. Deletion propagation and manual transfer commands remain deferred.
 
+## Why Bun Burner?
+
+Bun Burner started as a personal solution to a specific Bitburner development friction: I wanted to use the external editor and tools I already like while preserving the source files Bitburner itself understands.
+
+The core goal is intentionally narrow:
+
+- `.js` stays `.js`
+- `.jsx` stays `.jsx`
+- `.ts` stays `.ts`
+- `.tsx` stays `.tsx`
+- synchronization remains separate from transpilation, compilation, bundling, and source rewriting
+- bidirectional conflicts are preserved instead of silently resolved
+- setup and runtime behavior should remain understandable
+- the synchronization core should stay editor-independent
+
+Several excellent Bitburner external-editor and file-sync projects already exist. Bun Burner is not intended to replace them or compete with them. It is another implementation with a different set of tradeoffs, built because the workflows I tried did not quite match the workflow I wanted.
+
+If another tool better fits a user's needs, use it.
+
+Bun Burner also has an unusual success condition: if improvements to Bitburner or its officially supported tooling eventually make Bun Burner unnecessary, that is a successful outcome.
+
 ## Project policy
 
 - **TypeScript first; JavaScript welcome.** Core APIs use TypeScript contracts. Game source remains unchanged, and JavaScript users can use JSDoc for editor assistance and checking.
 - **Bun is the primary runtime.** It is the only server adapter and test runner maintained and tested here. The reusable core does not require Bun; a different runtime needs a contributor-provided adapter.
+- **Source synchronization is not a build system.** Bun Burner does not transpile, compile, bundle, or rewrite game scripts as part of synchronization.
+- **Safety over guessing.** When both sides change and the correct winner is ambiguous, preserve both versions and report the conflict rather than silently destroying work.
 - **Stable command names.** `start`, `test`, and `typecheck` are the entry points. `bun run start`, `npm run start`, and `yarn run start` select the same package script; currently that script starts Bun. Choosing a package manager does not choose a runtime. An alternative implementation can replace the script wiring while preserving the command names.
-- **Keep the scope small.** Maintain the typed Remote API and source synchronization. No runtime auto-detection, multi-runtime launcher framework, plugin framework, frontend, or additional runtime dependencies are required for this milestone.
+- **Keep the scope small.** Maintain the typed Remote API and source synchronization. No runtime auto-detection, multi-runtime launcher framework, plugin framework, frontend framework, or additional runtime dependencies are required for this milestone.
+- **Solve problems at the correct layer.** Editor-specific behavior belongs in editor integrations. Presentation belongs in optional clients. Problems that belong in Bitburner itself should be characterized and contributed upstream when practical.
+- **Ecosystem, not competition.** Alternatives should be documented honestly and recommended when they better fit a user's workflow.
+- **Planned obsolescence is a success condition.** Bun Burner should not manufacture reasons to exist after the underlying workflow is solved better upstream.
 
 ## Run
 
@@ -121,7 +147,8 @@ A live `getFileNames` round trip against Bitburner succeeded, including after re
 | Source filters and static symlink/path guards | Implemented |
 | Deletion/rename propagation | Deferred; missing tracked files are conflicts |
 | Native filesystem watcher, custom ignore patterns, manual transfer CLI | Deferred |
-| Dashboard, public API, editor plugins, WSS | Deferred |
+| WSS | Deferred |
+| Optional dashboards, TUIs, editor integrations, and other clients | Outside the core milestone; contributions are welcome when kept separate from the synchronization core |
 
 ## Enable file syncing
 
@@ -195,26 +222,77 @@ Bitburner 3.0.1's [Remote API implementation](https://github.com/bitburner-offic
 
 Queues can prevent overlapping operations within this connector, but cannot make a remote read followed by a write atomic. An in-game edit between those operations can still be overwritten. Rechecking, verification, and recovery copies reduce risk but cannot preserve a version the connector never observed. Strict prevention of lost updates would require game-side conditional writes/locking or a single-writer workflow. This project does not promise race-free simultaneous editing through the existing API.
 
+### Source synchronization, not frontend ownership
+
+Bun Burner preserves `.js`, `.jsx`, `.ts`, and `.tsx` source because Bitburner supports those workflows. That does not make React or any other frontend framework part of Bun Burner's core runtime.
+
+Optional dashboards, TUIs, editor extensions, and other clients are welcome areas for experimentation when they consume stable Bun Burner interfaces without making their framework a requirement for source synchronization.
+
+If a useful experiment grows into a distinct product with different dependencies or goals, it may belong in a separate package, extension, or project rather than inside the synchronization core.
+
 ### Outside the initial milestone
 
 - Automatic script execution or restart, deployment orchestration, and game automation.
-- General npm bundling, source transformation, or generated JavaScript deployment.
+- General npm bundling, source transformation, compilation, or generated JavaScript deployment.
 - Full JSON-RPC batch/notification support.
 - Save management and remote debugging integrations.
-- An editor-specific extension; the initial interface will operate on local files.
+- Built-in dashboards, TUIs, or frontend framework dependencies.
+- A required editor-specific extension; the initial interface operates on local files.
+- A general plugin framework without demonstrated demand.
+
+## Upstream-first development
+
+When Bun Burner exposes an unexpected limitation, the first question is not automatically how to build a permanent workaround.
+
+The preferred path is:
+
+1. Observe and reproduce the behavior.
+2. Isolate the owning layer.
+3. Add regression evidence where possible.
+4. Document the expected and actual behavior.
+5. Fix Bun Burner when the defect belongs here.
+6. Report or contribute upstream when the defect or missing capability belongs in Bitburner.
+7. Keep only the smallest compatibility workaround that is actually necessary.
+8. Remove that workaround when upstream support makes it unnecessary.
+
+Bun Burner is an independent consumer of the Bitburner Remote API, not an official reference client or official Bitburner test suite. Findings from real integration testing are still useful, especially when they expose documentation mismatches, implementation discrepancies, or missing capabilities that affect external tooling.
+
+## Planned obsolescence
+
+Bun Burner's continued necessity is not a project goal.
+
+If Bitburner itself, or officially supported tooling, eventually provides Bun Burner's core workflow with comparable safety and usability, this project should recommend the upstream solution instead of manufacturing reasons to keep another layer installed.
+
+At that point Bun Burner may reduce its scope, remove obsolete functionality, continue only where it offers genuinely distinct value, enter maintenance mode, or be archived.
+
+If the Bitburner ecosystem improves to the point that Bun Burner is no longer needed, the project has succeeded.
+
+## Ecosystem and alternatives
+
+Bun Burner is part of a broader Bitburner external-development ecosystem.
+
+Detailed comparisons should be based on firsthand testing, not assumptions. When that testing is performed, useful comparisons may include setup friction, configuration, source preservation, synchronization direction, conflict behavior, recovery, observability, type-definition workflows, platform support, strengths, limitations, and which workflows each tool serves best.
+
+Version numbers and test dates should accompany detailed comparisons because neighboring projects continue to evolve.
+
+The goal is not to declare a winner. The goal is to help users choose the workflow that fits them and to learn from good ideas elsewhere.
 
 ## Next steps
 
-- Validate sync with explicitly selected disposable game files before using valuable scripts.
-- Improve scanning efficiency and add configurable ignore patterns as needed.
-- Add deletion/rename workflows after their conflict semantics are tested.
-- Keep dashboards, frontend APIs, and editor integrations outside the initial sync milestone.
+- Validate sync against the actual game using explicitly selected disposable integration-test files before using valuable scripts.
+- Record live discrepancies separately from user-facing claims so potential Bun Burner fixes and upstream Bitburner findings can be reviewed independently.
+- Improve scanning efficiency and add configurable ignore patterns only when real use demonstrates the need.
+- Add deletion/rename workflows only after their conflict semantics are tested.
+- After the core beta is proven, evaluate neighboring tools firsthand and document their tradeoffs honestly.
+- Keep optional dashboards, frontend clients, editor integrations, and plugin experiments outside the core synchronization path unless demonstrated requirements justify a change.
 
 ## Extending the base engine
 
 Public contracts and JSDoc live alongside the implementation. Add a method contract in `src/bitburner/types.ts`, its result parser in `src/bitburner/client.ts`, then valid/invalid response tests and compile-time argument checks. Keep Bun socket lifecycle code in the adapter and game-specific validation in the wrapper. Do not assume TypeScript types validate received JSON.
 
 `RpcClient` owns one connection's pending requests; its optional constructor timeout is in milliseconds (default 30,000). `disconnect()` rejects pending requests but does not close the socket. The adapter owns socket closure. A timeout never cancels remote work, and the client does not retry writes. Keep game source transfers separate from any future build command for distributing the connector.
+
+The existing core boundaries are intended to make reuse possible without forcing a plugin framework into the initial release. New adapters or clients should depend on stable contracts where possible rather than moving editor, UI, or runtime-specific behavior into the core.
 
 ## Game types and editor setup
 
@@ -269,8 +347,19 @@ The runnable server in `src/index.ts` still uses Bun. Local storage uses Node-co
 
 Keep game declarations, core logic, and runtime adapters separate when extending the project. Package-manager-specific installation instructions and alternative launchers can be added without changing the game API contract.
 
+## AI-assisted development
+
+Bun Burner uses AI-assisted development, including OpenAI Codex and ChatGPT.
+
+AI may assist with implementation, analysis, testing, research, review, and documentation. Project requirements, architectural direction, acceptance criteria, validation, and release decisions remain human-reviewed.
+
+The goal is not to obscure how the software was produced. The goal is to build, understand, test, and maintain it responsibly regardless of which tools helped write it.
+
 ## Contributing and license
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, checks, scope, and contribution guidelines.
 
+Contributions that improve Bun Burner are welcome. Contributions that identify a problem better solved upstream are valuable too. The project prefers putting fixes at the layer where they belong rather than permanently accumulating workarounds.
+
 Bun Burner's original code is licensed under [MIT](LICENSE). The bundled `NetscriptDefinitions.d.ts` remains under Bitburner's own [Apache 2.0 with Commons Clause license](types/BITBURNER-LICENSE.txt), not MIT. See [game definition provenance](types/README.md) for its source and version.
+
