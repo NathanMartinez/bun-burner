@@ -94,7 +94,7 @@ bun run typecheck
 bun test
 ```
 
-The 24 tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
+The tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
 
 A real local WebSocket test verifies uploads and downloads through the typed RPC layer using a simulated game and disposable directories. Sync also has tests for conflicts, missing files, restart baselines, stale reads, failed writes, locking, path guards, and source-text preservation. Live game synchronization has not been tested.
 
@@ -208,3 +208,47 @@ Queues can prevent overlapping operations within this connector, but cannot make
 Public contracts and JSDoc live alongside the implementation. Add a method contract in `src/bitburner/types.ts`, its result parser in `src/bitburner/client.ts`, then valid/invalid response tests and compile-time argument checks. Keep Bun socket lifecycle code in the adapter and game-specific validation in the wrapper. Do not assume TypeScript types validate received JSON.
 
 `RpcClient` owns one connection's pending requests; its optional constructor timeout is in milliseconds (default 30,000). `disconnect()` rejects pending requests but does not close the socket. The adapter owns socket closure. A timeout never cancels remote work, and the client does not retry writes. Keep game source transfers separate from any future build command for distributing the connector.
+
+## Game types and editor setup
+
+[`NetscriptDefinitions.d.ts`](./NetscriptDefinitions.d.ts) is the checked-in source of truth for **in-game Netscript APIs**, verified byte-for-byte against Bitburner 3.0.1. It is distinct from the Remote API types used by the connector. See [provenance and upstream license](./types/README.md).
+
+In a game script:
+
+```ts
+import type { NS } from "@ns";
+
+export function main(ns: NS): void {
+  ns.tprint(ns.getHostname());
+}
+```
+
+The included `scripts/tsconfig.json` supplies editor settings for the default workspace. Type-check game scripts without emitting JavaScript:
+
+```bash
+bun run typecheck:game
+```
+
+This configuration excludes Bun/Node globals and uses the `@ns` alias only for type imports. React placeholders in Netscript declarations do not supply full React/JSX IntelliSense; compatible React typings remain a separate editor setup task.
+
+For an external scripts folder, create a `tsconfig.json` there extending this repository's `tsconfig.game.json`, and override `include`/`exclude` to select that folder:
+
+```json
+{
+  "extends": "/absolute/path/to/bun-burner/tsconfig.game.json",
+  "include": ["./**/*.ts", "./**/*.tsx"],
+  "exclude": ["./node_modules", "./.bun-burner"]
+}
+```
+
+Run `tsc -p /absolute/path/to/your/scripts/tsconfig.json` to check that external workspace. Changing the sync root does not automatically configure an external editor. The definitions file and tsconfig files are not uploaded by source sync.
+
+Connecting to the game **does not overwrite the definitions**. `getDefinitionFile` can retrieve the connected game's version, but refreshing the tracked snapshot should be a deliberate, reviewed update.
+
+## Core and runtime boundaries
+
+`src/core.ts` exports the RPC client, Bitburner wrapper, and synchronization interfaces/logic without importing Bun or Node modules. It uses standard JavaScript, timers, `TextEncoder`, and Web Crypto SHA-256. `tsconfig.core.json` checks this import graph without Bun or Node globals; the standard Web APIs must be supplied by the chosen runtime.
+
+The runnable server in `src/index.ts` still uses Bun. Local storage uses Node-compatible filesystem APIs in `src/sync/local.ts`. Supporting another runtime means providing the server/filesystem adapters; this repository does not yet ship or verify a Node or Deno launcher. The tests currently use Bun's test runner. npm and Yarn are package managers, not runtimes: using them does not make `bun run start` work without Bun.
+
+Keep game declarations, core logic, and runtime adapters separate when extending the project. Package-manager-specific installation instructions and alternative launchers can be added without changing the game API contract.
