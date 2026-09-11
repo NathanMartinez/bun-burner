@@ -39,3 +39,4 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # User game scripts in the optional quick-start workspace
 /scripts/*
 !/scripts/.gitkeep
+!/scripts/tsconfig.json

@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.game.json",
+  "include": ["./**/*.ts", "./**/*.tsx"],
+  "exclude": ["./.bun-burner", "./node_modules"]
+}
