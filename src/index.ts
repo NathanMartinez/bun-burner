@@ -1,3 +1,4 @@
+import { readConfig } from "./config.ts";
 import { BitburnerClient } from "./bitburner/client.ts";
 import { RpcClient } from "./rpc/client.ts";
 
@@ -7,8 +8,7 @@ interface ConnectionData {
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const server = Bun.serve({
-  hostname: "127.0.0.1",
-  port: 12525,
+  ...readConfig(process.env),
 
   fetch(request, server) {
     if (server.upgrade(request, { data: {} })) return;
