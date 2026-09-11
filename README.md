@@ -1,4 +1,4 @@
-# bun-burner
+# Bun Burner
 
 A local Bun/TypeScript bridge that synchronizes original source files between an external editor and Bitburner through its Remote API.
 
@@ -268,3 +268,9 @@ Connecting to the game **does not overwrite the definitions**. `getDefinitionFil
 The runnable server in `src/index.ts` still uses Bun. Local storage uses Node-compatible filesystem APIs in `src/sync/local.ts`. Supporting another runtime means providing the server/filesystem adapters; this repository does not yet ship or verify a Node or Deno launcher. The tests currently use Bun's test runner. npm and Yarn are package managers, not runtimes: using them does not make `bun run start` work without Bun.
 
 Keep game declarations, core logic, and runtime adapters separate when extending the project. Package-manager-specific installation instructions and alternative launchers can be added without changing the game API contract.
+
+## Contributing and license
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, checks, scope, and contribution guidelines.
+
+Bun Burner's original code is licensed under [MIT](LICENSE). The bundled `NetscriptDefinitions.d.ts` remains under Bitburner's own [Apache 2.0 with Commons Clause license](types/BITBURNER-LICENSE.txt), not MIT. See [game definition provenance](types/README.md) for its source and version.
