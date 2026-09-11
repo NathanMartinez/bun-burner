@@ -54,9 +54,6 @@ const server = Bun.serve({
           }
         }).finally(() => { syncOwner = false; });
       }
-      void bitburner.call("getFileNames", { server: "home" })
-        .then((files) => console.log(JSON.stringify(files, null, 2)))
-        .catch((error: unknown) => console.error("getFileNames failed:", error));
     },
 
     message(ws, message) {
