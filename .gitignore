@@ -32,3 +32,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Local synchronization baselines and recovery copies
+.bun-burner/
+
+# User game scripts in the optional quick-start workspace
+/scripts/*
+!/scripts/.gitkeep
