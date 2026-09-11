@@ -3,16 +3,23 @@
 export type Snapshot = Map<string, string>;
 /** File operations used by the reconciler. Implementations must enforce path boundaries. */
 export interface FileStore {
+  /** Return all selected files; reject incomplete scans instead of treating errors as absence. */
   snapshot(): Promise<Snapshot>;
+  /** Read unchanged source text. Return undefined only when the file does not exist. */
   read(filename: string): Promise<string | undefined>;
+  /** Create or replace source text without transpiling; reject write failures. */
   write(filename: string, content: string): Promise<void>;
 }
 /** Persistent state and observed-version recovery storage, owned by the local workspace. */
 export interface SyncState {
+  /** Load filename-to-SHA-256 baselines; return an empty map for a new workspace. */
   load(): Promise<Map<string, string>>;
+  /** Persist the last reconciled content hashes; reject persistence failures. */
   save(baseline: Map<string, string>): Promise<void>;
+  /** Preserve an observed version for recovery before an overwrite or conflict report. */
   backup(filename: string, side: "local" | "game", content: string): Promise<void>;
 }
+/** A verified transfer or an unresolved conflict, using a workspace-relative filename. */
 export interface SyncEvent { kind: "upload" | "download" | "conflict"; filename: string }
 /** Standard Web Crypto SHA-256; compatible with existing persisted baselines. */
 export async function hash(content: string): Promise<string> {
@@ -32,6 +39,7 @@ export class SyncEngine {
   private busy = false;
   private stopped = false;
 
+  /** Compose stores and persistent state. Reporting is synchronous; callbacks should not throw. */
   constructor(
     private readonly local: FileStore,
     private readonly remote: FileStore,
@@ -42,7 +50,10 @@ export class SyncEngine {
   /** Cancel subsequent transfers. An already-sent remote write cannot be cancelled. */
   stop(): void { this.stopped = true; }
 
-  /** Run one scan; local content must be unchanged across two scans before transfer. */
+  /**
+   * Run one scan; local content must be unchanged across two scans before transfer.
+   * Rejects overlapping scans and storage/transfer failures. Pause on rejection; a remote write may have succeeded.
+   */
   async tick(): Promise<void> {
     if (this.busy) throw new Error("A synchronization scan is already running");
     if (this.stopped) return;

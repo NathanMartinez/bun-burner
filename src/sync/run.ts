@@ -3,7 +3,13 @@ import { SyncEngine, type SyncEvent } from "./engine.ts";
 import { LocalFiles } from "./local.ts";
 import { RemoteFiles } from "./remote.ts";
 
-export interface SyncOptions { root: string; server: string }
+/** Map a dedicated local source directory to one game server. */
+export interface SyncOptions {
+  /** Local directory; relative paths resolve from the process working directory. */
+  root: string;
+  /** Game server hostname, usually home. */
+  server: string;
+}
 /** Sync is opt-in. The selected directory maps directly to one game server. */
 export function readSyncOptions(env: Record<string, string | undefined>): SyncOptions | undefined {
   const enabled = env.BUN_BURNER_SYNC_ENABLED ?? "false";
@@ -16,7 +22,11 @@ export function readSyncOptions(env: Record<string, string | undefined>): SyncOp
   return { root, server };
 }
 
-/** Poll sequentially every second. Any scan/transfer failure pauses until reconnect. */
+/**
+ * Poll sequentially with a one-second delay between scans, holding a workspace lock.
+ * Abort stops future transfers and releases the lock after the current operation settles.
+ * Rejects on failure; the connection owner must keep sync paused until reconnect.
+ */
 export async function runSync(
   api: BitburnerClient,
   options: SyncOptions,

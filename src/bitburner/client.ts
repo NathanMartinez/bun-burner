@@ -65,6 +65,7 @@ const parsers: { [M in keyof RemoteApi]: (value: unknown) => RemoteApi[M]["resul
 
 /** Typed, runtime-validated access to the complete Bitburner 3.0.1 Remote API. */
 export class BitburnerClient {
+  /** Wrap an existing RPC connection; this client does not own socket creation or closure. */
   constructor(private readonly rpc: RpcClient) {}
 
   /**

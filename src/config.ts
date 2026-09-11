@@ -1,5 +1,10 @@
 /** Validated WebSocket listener configuration. */
-export interface ServerConfig { hostname: string; port: number }
+export interface ServerConfig {
+  /** Listener hostname or IP address, without a URL scheme. Defaults to loopback. */
+  hostname: string;
+  /** Listener port, an integer from 1 through 65535. */
+  port: number;
+}
 
 /** Read optional environment settings; reject invalid values before opening a socket. */
 export function readConfig(env: Record<string, string | undefined>): ServerConfig {

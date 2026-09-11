@@ -1,3 +1,4 @@
+/** Directory names excluded from source synchronization at any depth. */
 export const ignored = new Set(["node_modules", "dist", "out", "coverage"]);
 /** Only source files with canonical relative paths may cross the workspace boundary. */
 export function allowed(filename: string): boolean {

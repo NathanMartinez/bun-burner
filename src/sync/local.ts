@@ -45,6 +45,7 @@ export class LocalFiles implements FileStore, SyncState {
     return current;
   }
 
+  /** Read strict UTF-8 source, preserving its BOM; only a missing file returns undefined. */
   async read(filename: string): Promise<string | undefined> {
     const path = await this.path(filename);
     try {
@@ -52,6 +53,7 @@ export class LocalFiles implements FileStore, SyncState {
     } catch (error) { if (missing(error)) return undefined; throw error; }
   }
 
+  /** Scan supported source files; reject symlinks and read failures instead of returning a partial snapshot. */
   async snapshot(): Promise<Snapshot> {
     const files: Snapshot = new Map();
     const walk = async (directory: string, prefix = "") => {
@@ -71,6 +73,7 @@ export class LocalFiles implements FileStore, SyncState {
     return files;
   }
 
+  /** Replace a supported file through a temporary file and rename, preserving source text. */
   async write(filename: string, content: string): Promise<void> {
     const path = await this.path(filename);
     await mkdir(dirname(path), { recursive: true });
@@ -84,6 +87,7 @@ export class LocalFiles implements FileStore, SyncState {
     finally { await unlink(temp).catch((error: unknown) => { if (!missing(error)) throw error; }); }
   }
 
+  /** Load and validate this server's baseline; missing state starts a fresh workspace. */
   async load(): Promise<Map<string, string>> {
     const path = join(this.stateDir, "state.json");
     let raw: string;
@@ -105,10 +109,12 @@ export class LocalFiles implements FileStore, SyncState {
     return result;
   }
 
+  /** Atomically replace the persisted filename-to-content-hash baseline. */
   async save(baseline: Map<string, string>): Promise<void> {
     await this.atomic(join(this.stateDir, "state.json"), JSON.stringify({ version: 1, server: this.server, files: [...baseline] }));
   }
 
+  /** Save a content-addressed recovery copy; repeated copies of the same version are retained once. */
   async backup(filename: string, side: "local" | "game", content: string): Promise<void> {
     // Flat, content-addressed recovery files avoid trusting remote paths.
     const path = join(this.stateDir, `${await hash(filename)}-${side}-${await hash(content)}.json`);

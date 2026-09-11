@@ -4,7 +4,9 @@ import { allowed } from "./paths.ts";
 
 /** Original-source Remote API adapter. It never calls deleteFile or executes scripts. */
 export class RemoteFiles implements FileStore {
+  /** Bind file operations to one server on an existing game connection. */
   constructor(private readonly api: BitburnerClient, private readonly server: string) {}
+  /** Fetch and filter source files; reject duplicate paths or failed responses. */
   async snapshot(): Promise<Snapshot> {
     const files: Snapshot = new Map();
     for (const file of await this.api.call("getAllFiles", { server: this.server })) {
@@ -14,12 +16,14 @@ export class RemoteFiles implements FileStore {
     }
     return files;
   }
+  /** Return undefined only when listing confirms absence; subsequent read failures reject. */
   async read(filename: string): Promise<string | undefined> {
     if (!allowed(filename)) throw new Error("Unsupported remote path");
     const files = await this.api.call("getFileNames", { server: this.server });
     if (!files.includes(filename)) return undefined;
     return this.api.call("getFile", { server: this.server, filename });
   }
+  /** Push unchanged source text. A timeout does not prove the game rejected the write. */
   async write(filename: string, content: string): Promise<void> {
     if (!allowed(filename)) throw new Error("Unsupported remote path");
     await this.api.call("pushFile", { server: this.server, filename, content });
