@@ -38,7 +38,7 @@ test("metadata uses numeric timestamps from the 3.0.1 implementation", async () 
   rpc.handleMessage('{"jsonrpc":"2.0","id":1,"result":{"filename":"a.js","atime":1,"btime":2,"mtime":3}}');
   expect((await result).mtime).toBe(3);
   const invalid = api.call("getFileMetadata", { server: "home", filename: "a.js" });
-  rpc.handleMessage('{"jsonrpc":"2.0","id":2,"result":{"filename":"a.js","atime":"1","btime":2,"mtime":3}}');
+  rpc.handleMessage('{"jsonrpc":"2.0","id":2,"result":{"filename":"a.js","atime":"invalid","btime":2,"mtime":3}}');
   await rejects(invalid, /Invalid getFileMetadata/);
 });
 
@@ -57,7 +57,7 @@ test("remaining Remote API methods validate results and omit absent params", asy
     { args: ["pushFile", { server: "home", filename: "a.tsx", content: "const a = <div />;" }], result: "OK", invalid: "ok" },
     { args: ["deleteFile", { server: "home", filename: "a.tsx" }], result: "OK", invalid: true },
     { args: ["getAllFiles", { server: "home" }], result: [{ filename: "a.tsx", content: "const a = <div />;" }], invalid: [{ filename: "a.tsx", content: 2 }] },
-    { args: ["getAllFileMetadata", { server: "home" }], result: [{ filename: "a.tsx", atime: 1, btime: 2, mtime: 3 }], invalid: [{ filename: "a.tsx", atime: "1", btime: 2, mtime: 3 }] },
+    { args: ["getAllFileMetadata", { server: "home" }], result: [{ filename: "a.tsx", atime: 1, btime: 2, mtime: 3 }], invalid: [{ filename: "a.tsx", atime: "invalid", btime: 2, mtime: 3 }] },
     { args: ["calculateRam", { server: "home", filename: "a.tsx" }], result: 1.6, invalid: "1.6" },
     { args: ["getDefinitionFile"], result: "interface NS {}", invalid: {} },
     { args: ["getSaveFile"], result: { identifier: "fixture", binary: true, save: "abc" }, invalid: { identifier: "fixture", binary: "true", save: "abc" } },
@@ -90,3 +90,16 @@ function completeApiTypeChecks(api: BitburnerClient) {
   // @ts-expect-error A union including pushFile still requires its content parameter.
   api.call(uncertainMethod, { server: "home", filename: "a.ts" });
 }
+
+
+test("metadata normalizes numeric strings and rejects ambiguous timestamps", async () => {
+  const { rpc, api } = fixture();
+  let id = 0;
+  for (const value of ["123", "1.5", "1e3", "", " ", "NaN", "Infinity", "2026-09-11", "0x10", null, true]) {
+    const result = api.call("getFileMetadata", { server: "home", filename: "a.ts" });
+    rpc.handleMessage(JSON.stringify({ jsonrpc: "2.0", id: ++id, result: { filename: "a.ts", atime: value, btime: 0, mtime: "2" } }));
+    if (["123", "1.5", "1e3"].includes(String(value))) {
+      expect((await result).atime).toBe(Number(value));
+    } else await rejects(result, /Invalid getFileMetadata/);
+  }
+});

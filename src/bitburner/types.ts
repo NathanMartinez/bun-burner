@@ -2,7 +2,7 @@
 export interface FileLocation { server: string; filename: string }
 /** Original source text; no transformation is performed by this client. */
 export interface FileContent { filename: string; content: string }
-/** Numeric timestamps as returned by Bitburner 3.0.1. */
+/** Normalized timestamps. Numeric wire strings are accepted; units are preserved. */
 export interface FileMetadata { filename: string; atime: number; btime: number; mtime: number }
 /** The limited server summary exposed by the Remote API. */
 export interface ServerInfo { hostname: string; hasAdminRights: boolean; purchasedByPlayer: boolean }

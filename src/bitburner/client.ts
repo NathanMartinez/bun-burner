@@ -21,9 +21,19 @@ function array<T>(value: unknown, parse: (item: unknown) => T): T[] {
   if (!Array.isArray(value)) throw new Error("Expected an array");
   return value.map((item: unknown) => parse(item));
 }
+/** Normalize numeric wire timestamps without guessing date formats or units. */
+function timestamp(value: unknown): number {
+  if (typeof value === "string") {
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
+      throw new Error("Expected a numeric timestamp string");
+    }
+    return number(Number(value));
+  }
+  return number(value);
+}
 function metadata(value: unknown): FileMetadata {
   if (!record(value)) throw new Error("Expected file metadata");
-  return { filename: text(value.filename), atime: number(value.atime), btime: number(value.btime), mtime: number(value.mtime) };
+  return { filename: text(value.filename), atime: timestamp(value.atime), btime: timestamp(value.btime), mtime: timestamp(value.mtime) };
 }
 function ok(value: unknown): "OK" {
   if (value !== "OK") throw new Error("Expected OK acknowledgement");
