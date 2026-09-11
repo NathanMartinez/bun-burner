@@ -4,13 +4,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** One connection's request lifecycle; the caller owns socket callbacks and closure. */
 export class RpcClient {
   private nextId = 1;
   private pendingRequests = new Map<number, PendingRequest>();
   private disconnected = false;
 
-  constructor(private readonly ws: RpcTransport) {}
+  /** The timeout is milliseconds, defaults to 30 seconds, and does not cancel remote work. */
+  constructor(private readonly ws: RpcTransport, private readonly timeoutMs = 30_000) {
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2_147_483_647) {
+      throw new Error("RPC timeout must be a positive integer no greater than 2147483647");
+    }
+  }
 
+  /** Send one request. Rejects on errors or timeout; never retries or assumes a write was cancelled. */
   call(method: string, params?: unknown): Promise<unknown> {
     if (this.disconnected) {
       return Promise.reject(new Error("RPC connection is closed"));
@@ -23,7 +30,7 @@ export class RpcClient {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error(`RPC request timed out: ${method} (${id})`));
-      }, 30_000);
+      }, this.timeoutMs);
 
       const pending: PendingRequest = {
         resolve: (value) => { clearTimeout(timer); resolve(value); },
@@ -42,7 +49,10 @@ export class RpcClient {
     });
   }
 
-  // The Bun adapter decodes frames; this layer receives JSON text.
+  /**
+   * Settle the matching request from JSON text. Valid unknown IDs are ignored.
+   * Throws for malformed envelopes; the adapter decides whether to close the socket.
+   */
   handleMessage(message: string): void {
     const response: unknown = JSON.parse(message);
     if (!isRecord(response) || response.jsonrpc !== "2.0" ||
@@ -79,6 +89,7 @@ export class RpcClient {
     else pending.resolve(response.result);
   }
 
+  /** Reject all outstanding requests and prohibit further calls. Does not close the socket. */
   disconnect(reason: unknown = new Error("Bitburner disconnected")): void {
     this.disconnected = true;
     for (const pending of this.pendingRequests.values()) pending.reject(reason);
