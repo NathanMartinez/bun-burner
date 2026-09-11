@@ -55,3 +55,10 @@ test("timeouts are validated and duplicate replies do not affect other requests"
   expect(await a).toBe(false);
   expect(await b).toBe(0);
 });
+
+test("transport accepts browser-style void send results", async () => {
+  const rpc = new RpcClient({ send(_message: string): void {} });
+  const result = rpc.call("read");
+  rpc.handleMessage('{"jsonrpc":"2.0","id":1,"result":"ok"}');
+  expect(await result).toBe("ok");
+});

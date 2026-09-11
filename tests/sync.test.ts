@@ -162,3 +162,8 @@ test("remote adapter sends source unchanged through the real typed RPC client", 
   expect(await remote.read("missing.ts")).toBeUndefined();
   expect(sent.some((s) => JSON.parse(s).method === "deleteFile")).toBe(false);
 });
+
+test("Web Crypto hashes preserve the persisted SHA-256 baseline format", async () => {
+  const { hash } = await import("../src/sync/engine.ts");
+  expect(await hash("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+});
