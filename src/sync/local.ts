@@ -18,9 +18,12 @@ export class LocalFiles implements FileStore, SyncState {
   /** The root must already exist. Use a dedicated source workspace, not the connector repo. */
   static async create(root: string, server: string): Promise<LocalFiles> {
     const path = await realpath(resolve(root));
-    if (!(await lstat(path)).isDirectory()) throw new Error("Sync root must be a directory");
+    if (!(await lstat(path)).isDirectory()) throw Object.assign(new Error("Sync root must be a directory"), { code: "ENOTDIR", path });
     const local = new LocalFiles(path, server);
-    await mkdir(local.stateDir, { recursive: true });
+    try { await mkdir(local.stateDir); }
+    catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+    }
     if ((await lstat(local.stateDir)).isSymbolicLink()) throw new Error("Sync state must not be a symlink");
     return local;
   }
@@ -30,10 +33,20 @@ export class LocalFiles implements FileStore, SyncState {
     const path = join(this.stateDir, "lock");
     const file = await open(path, "wx");
     try { await file.writeFile(String(process.pid)); } finally { await file.close(); }
-    return async () => { await unlink(path); };
+    return async () => {
+      try { await unlink(path); }
+      catch (error) { if (!missing(error)) throw error; }
+    };
+  }
+
+  private async requireRoot(): Promise<void> {
+    if (!(await lstat(this.root)).isDirectory()) {
+      throw Object.assign(new Error("Sync root must remain a directory"), { code: "ENOTDIR", path: this.root });
+    }
   }
 
   private async path(filename: string): Promise<string> {
+    await this.requireRoot();
     if (!allowed(filename)) throw new Error(`Unsafe or unsupported sync path: ${filename}`);
     let current = this.root;
     for (const part of filename.split("/")) {
@@ -76,7 +89,15 @@ export class LocalFiles implements FileStore, SyncState {
   /** Replace a supported file through a temporary file and rename, preserving source text. */
   async write(filename: string, content: string): Promise<void> {
     const path = await this.path(filename);
-    await mkdir(dirname(path), { recursive: true });
+    // Create descendants only; never recreate a vanished configured root.
+    let parent = this.root;
+    for (const part of filename.split("/").slice(0, -1)) {
+      parent = join(parent, part);
+      try { await mkdir(parent); }
+      catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+      }
+    }
     await this.path(filename);
     await this.atomic(path, content);
   }
