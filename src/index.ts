@@ -1,3 +1,4 @@
+import { syncFailureMessage } from "./sync/errors.ts";
 import { readSyncOptions, runSync } from "./sync/run.ts";
 import { readConfig } from "./config.ts";
 import { BitburnerClient } from "./bitburner/client.ts";
@@ -46,7 +47,7 @@ const server = Bun.serve({
         syncTask = runSync(bitburner, syncOptions, controller.signal, ({ kind, filename }) => {
           console.log(`[sync:${kind}] ${filename}`);
         }).catch(async (error: unknown) => {
-          console.error("Sync paused; fix the problem and reconnect:", error);
+          console.error(syncFailureMessage(error, syncOptions.root));
           // Keep the connection paused; auto-reconnect must not blindly retry writes.
           if (!controller.signal.aborted) {
             await new Promise<void>((resolve) => controller.signal.addEventListener("abort", () => resolve(), { once: true }));
