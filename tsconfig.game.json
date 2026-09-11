@@ -3,15 +3,35 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ESNext", "DOM"],
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
     "types": [],
     "strict": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "jsx": "preserve",
-    "paths": { "@ns": ["./NetscriptDefinitions.d.ts"] }
+    "paths": {
+      "@ns": [
+        "./NetscriptDefinitions.d.ts"
+      ]
+    },
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["NetscriptDefinitions.d.ts", "scripts/**/*.ts", "scripts/**/*.tsx", "examples/game-types.ts"],
-  "exclude": ["node_modules", "scripts/.bun-burner"]
+  "include": [
+    "NetscriptDefinitions.d.ts",
+    "scripts/**/*.ts",
+    "scripts/**/*.tsx",
+    "examples/game-types.ts",
+    "scripts/**/*.js",
+    "scripts/**/*.jsx",
+    "examples/game-types.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "scripts/.bun-burner"
+  ]
 }

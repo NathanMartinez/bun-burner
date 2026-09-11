@@ -4,6 +4,13 @@ A local Bun/TypeScript bridge that synchronizes original source files between an
 
 **Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Opt-in two-way source synchronization is implemented on this development branch. Deletion propagation and manual transfer commands remain deferred.
 
+## Project policy
+
+- **TypeScript first; JavaScript welcome.** Core APIs use TypeScript contracts. Game source remains unchanged, and JavaScript users can use JSDoc for editor assistance and checking.
+- **Bun is the primary runtime.** It is the only server adapter and test runner maintained and tested here. The reusable core does not require Bun; a different runtime needs a contributor-provided adapter.
+- **Stable command names.** `start`, `test`, and `typecheck` are the entry points. `bun run start`, `npm run start`, and `yarn run start` select the same package script; currently that script starts Bun. Choosing a package manager does not choose a runtime. An alternative implementation can replace the script wiring while preserving the command names.
+- **Keep the scope small.** Maintain the typed Remote API and source synchronization. No runtime auto-detection, multi-runtime launcher framework, plugin framework, frontend, or additional runtime dependencies are required for this milestone.
+
 ## Run
 
 Local checks use Bun 1.4.2 and TypeScript 7.0.2. The API targets Bitburner 3.0.1; live verification currently covers filename listing, not game-file synchronization.
@@ -223,10 +230,19 @@ export function main(ns: NS): void {
 }
 ```
 
-The included `scripts/tsconfig.json` supplies editor settings for the default workspace. Type-check game scripts without emitting JavaScript:
+The included `scripts/tsconfig.json` supplies editor settings for the default workspace. TypeScript and JavaScript source are included; JavaScript checking is enabled with `checkJs`, and JSDoc can describe Netscript parameters. Type-check game scripts without emitting JavaScript:
 
 ```bash
 bun run typecheck:game
+```
+
+JavaScript can use the same definitions without a runtime import:
+
+```js
+/** @param {import("@ns").NS} ns */
+export function main(ns) {
+  ns.tprint(ns.getHostname());
+}
 ```
 
 This configuration excludes Bun/Node globals and uses the `@ns` alias only for type imports. React placeholders in Netscript declarations do not supply full React/JSX IntelliSense; compatible React typings remain a separate editor setup task.
@@ -236,7 +252,7 @@ For an external scripts folder, create a `tsconfig.json` there extending this re
 ```json
 {
   "extends": "/absolute/path/to/bun-burner/tsconfig.game.json",
-  "include": ["./**/*.ts", "./**/*.tsx"],
+  "include": ["./**/*.ts", "./**/*.tsx", "./**/*.js", "./**/*.jsx"],
   "exclude": ["./node_modules", "./.bun-burner"]
 }
 ```
