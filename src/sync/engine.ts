@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 
 /** A complete snapshot of selected source files. Absence must not mean read failure. */
 export type Snapshot = Map<string, string>;
@@ -15,8 +14,10 @@ export interface SyncState {
   backup(filename: string, side: "local" | "game", content: string): Promise<void>;
 }
 export interface SyncEvent { kind: "upload" | "download" | "conflict"; filename: string }
-export function hash(content: string): string {
-  return createHash("sha256").update(content).digest("hex");
+/** Standard Web Crypto SHA-256; compatible with existing persisted baselines. */
+export async function hash(content: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -50,15 +51,15 @@ export class SyncEngine {
       this.baseline ??= await this.state.load();
       const local = await this.local.snapshot();
       const remote = await this.remote.snapshot();
-      const current = new Map([...local].map(([name, content]) => [name, hash(content)]));
+      const current = new Map(await Promise.all([...local].map(async ([name, content]) => [name, await hash(content)] as const)));
       const previous = this.previousLocal;
       this.previousLocal = current;
       const names = new Set([...local.keys(), ...remote.keys(), ...this.baseline.keys()]);
       for (const filename of [...names].sort()) {
         if (this.stopped) return;
         const left = local.get(filename), right = remote.get(filename);
-        const lh = left === undefined ? undefined : hash(left);
-        const rh = right === undefined ? undefined : hash(right);
+        const lh = left === undefined ? undefined : await hash(left);
+        const rh = right === undefined ? undefined : await hash(right);
         const base = this.baseline.get(filename);
         if (lh !== previous.get(filename)) continue;
         if (lh === rh) {
@@ -96,7 +97,7 @@ export class SyncEngine {
         if (await target.read(filename) !== content) {
           throw new Error(`Sync verification failed for ${filename}; synchronization paused`);
         }
-        this.baseline.set(filename, hash(content));
+        this.baseline.set(filename, await hash(content));
         await this.state.save(this.baseline);
         this.conflicts.delete(filename);
         this.report({ kind: direction, filename });

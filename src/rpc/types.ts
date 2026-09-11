@@ -1,7 +1,7 @@
-/** Minimal transport implemented by Bun sockets and test transports. */
+/** Minimal synchronous send contract; adapters may wrap any WebSocket implementation. */
 export interface RpcTransport {
-  /** Bun send semantics: 0 = dropped, -1 = queued, positive = sent. */
-  send(message: string): number;
+  /** Throw on failure or return 0 for a dropped message. Void/nonzero means accepted, not remotely acknowledged. */
+  send(message: string): void | number;
 }
 
 /** Promise controls retained until a response, failure, or timeout settles a request. */

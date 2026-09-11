@@ -3,14 +3,9 @@ import { resolve, join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { hash, type FileStore, type SyncState, type Snapshot } from "./engine.ts";
 
-const ignored = new Set(["node_modules", "dist", "out", "coverage"]);
-/** Only source files with canonical relative paths may cross the workspace boundary. */
-export function allowed(filename: string): boolean {
-  const parts = filename.split("/");
-  return !filename.includes("\\") && !filename.includes("\0") &&
-    parts.every((part) => part !== "" && !part.startsWith(".") && !ignored.has(part)) &&
-    /\.(?:js|ts|jsx|tsx)$/.test(filename) && !filename.endsWith(".d.ts");
-}
+import { allowed, ignored } from "./paths.ts";
+export { allowed } from "./paths.ts";
+
 function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
@@ -116,7 +111,7 @@ export class LocalFiles implements FileStore, SyncState {
 
   async backup(filename: string, side: "local" | "game", content: string): Promise<void> {
     // Flat, content-addressed recovery files avoid trusting remote paths.
-    const path = join(this.stateDir, `${hash(filename)}-${side}-${hash(content)}.json`);
+    const path = join(this.stateDir, `${await hash(filename)}-${side}-${await hash(content)}.json`);
     try { await writeFile(path, JSON.stringify({ filename, side, content }), { flag: "wx" }); }
     catch (error) { if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error; }
   }

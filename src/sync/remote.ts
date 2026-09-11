@@ -1,6 +1,6 @@
 import type { BitburnerClient } from "../bitburner/client.ts";
 import type { FileStore, Snapshot } from "./engine.ts";
-import { allowed } from "./local.ts";
+import { allowed } from "./paths.ts";
 
 /** Original-source Remote API adapter. It never calls deleteFile or executes scripts. */
 export class RemoteFiles implements FileStore {
