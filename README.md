@@ -1,12 +1,12 @@
 # bun-burner
 
-A local Bun/TypeScript bridge to Bitburner's Remote API. The intended product connects an external code editor to the game with bidirectional file synchronization that preserves original source files.
+A local Bun/TypeScript bridge that synchronizes original source files between an external editor and Bitburner through its Remote API.
 
 **Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Opt-in two-way source synchronization is implemented on this development branch. Deletion propagation and manual transfer commands remain deferred.
 
 ## Run
 
-Validated with Bun 1.4.2, TypeScript 7.0.2, and Bitburner 3.0.1.
+Local checks use Bun 1.4.2 and TypeScript 7.0.2. The API targets Bitburner 3.0.1; live verification currently covers filename listing, not game-file synchronization.
 
 ```bash
 bun install --frozen-lockfile
@@ -23,6 +23,9 @@ By default, the bridge listens on `ws://127.0.0.1:12525`. Each connection trigge
 
 ## Current functionality
 
+- Opt-in two-way source create/update sync, preserving JS, TS, JSX, and TSX files.
+- A configurable scripts directory, defaulting to `./scripts`, mapped to one game server.
+- Sequential polling, persisted content hashes, conflict reporting, and recovery copies.
 - A separate RPC client and pending-request map for each WebSocket connection.
 - Numeric request IDs and promise-based responses, including out-of-order replies.
 - A 30-second request timeout, send-failure handling, and pending-request rejection on disconnect.
@@ -50,7 +53,7 @@ The wrapper also exposes:
 | `getSaveFile` | None | `{ identifier: string, binary: boolean, save: string }` |
 | `getAllServers` | None | `{ hostname: string, hasAdminRights: boolean, purchasedByPlayer: boolean }[]` |
 
-`pushFile` and `deleteFile` mutate game files when explicitly called. The sample server does not call them. Parameterless methods are called without a second argument, for example `await bitburner.call("getDefinitionFile")`.
+`pushFile` and `deleteFile` mutate game files when called. Enabled synchronization uses `pushFile` for uploads; the sync engine never calls `deleteFile`. Parameterless methods are called without a second argument, for example `await bitburner.call("getDefinitionFile")`.
 
 The generic `RpcClient.call()` intentionally returns `Promise<unknown>`. Use `BitburnerClient.call()` for method-specific parameter checks, inferred result types, and runtime result validation. For example, with a connected `BitburnerClient` named `bitburner`:
 
@@ -59,7 +62,7 @@ const files = await bitburner.call("getFileNames", { server: "home" });
 // files: string[]
 ```
 
-The contract follows the [Bitburner 3.0.1 implementation](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/RemoteFileAPI/MessageDefinitions.ts) and [request handlers](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/RemoteFileAPI/MessageHandlers.ts). In that version, error payloads are strings and metadata timestamps are numbers.
+The contract follows the [Bitburner 3.0.1 implementation](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/RemoteFileAPI/MessageDefinitions.ts) and [request handlers](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/RemoteFileAPI/MessageHandlers.ts). In that version, error payloads are strings and metadata timestamps are numbers. The wrapper also accepts numeric timestamp strings and normalizes them to finite numbers, preserving their units. Empty strings, date strings, booleans, and non-finite values are rejected.
 
 ## Structure
 
@@ -78,6 +81,10 @@ tests/
   client.test.ts       RPC lifecycle tests
   bitburner.test.ts    API validation and type checks
   config.test.ts       Listener configuration checks
+  sync.test.ts         Reconciliation, storage, and path checks
+  sync-websocket.test.ts  End-to-end sync against a simulated game
+scripts/               Optional default workspace; user files are Git-ignored
+.env.example           Listener and sync configuration defaults
 ```
 
 ## Verify
@@ -87,7 +94,7 @@ bun run typecheck
 bun test
 ```
 
-The local tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
+The 24 tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
 
 A real local WebSocket test verifies uploads and downloads through the typed RPC layer using a simulated game and disposable directories. Sync also has tests for conflicts, missing files, restart baselines, stale reads, failed writes, locking, path guards, and source-text preservation. Live game synchronization has not been tested.
 
@@ -111,7 +118,7 @@ A live `getFileNames` round trip against Bitburner succeeded, including after re
 
 ## Enable file syncing
 
-Copy `.env.example` to `.env` if you have not already. Use the provided `scripts/` folder for a quick start, or point at an existing folder elsewhere:
+Copy `.env.example` to `.env` if you have not already. Sync is disabled by default. Set these values to enable it using the provided `scripts/` folder:
 
 ```dotenv
 BUN_BURNER_SYNC_ENABLED=true
@@ -119,13 +126,26 @@ BUN_BURNER_SYNC_ROOT=./scripts
 BUN_BURNER_SYNC_SERVER=home
 ```
 
-For an external workspace, set `BUN_BURNER_SYNC_ROOT=/absolute/path/to/your/game-scripts`. Relative paths are resolved from the directory where you launch the app. The folder must exist. Its contents map directly to the selected game server: `lib/example.ts` becomes `lib/example.ts` on `home`; do not add a `home/` directory unless you want it in the game path.
+For an existing external workspace, change only the root:
+
+```dotenv
+BUN_BURNER_SYNC_ROOT=/absolute/path/to/your/game-scripts
+```
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `BUN_BURNER_HOST` | `127.0.0.1` | Listener address |
+| `BUN_BURNER_PORT` | `12525` | Listener port |
+| `BUN_BURNER_SYNC_ENABLED` | `false` | Enable transfers with `true` |
+| `BUN_BURNER_SYNC_ROOT` | `./scripts` | Existing local source directory |
+| `BUN_BURNER_SYNC_SERVER` | `home` | Destination game server |
+ Relative paths are resolved from the directory where you launch the app. The folder must exist. Its contents map directly to the selected game server: `lib/example.ts` becomes `lib/example.ts` on `home`; do not add a `home/` directory unless you want it in the game path.
 
 Restart with `bun run start`, then reconnect Bitburner. The default `scripts/` folder is separate from connector code, and its contents are ignored by this repository's Git rules. `.gitkeep` only ensures the empty folder is included in a clone.
 
 The first connection copies files present on only one side. Different existing files on both sides are conflicts, with no automatic winner. Selected `.js`, `.ts`, `.jsx`, and `.tsx` files retain source text, extensions, and line endings. Hidden paths, `node_modules`, `dist`, `out`, `coverage`, and `.d.ts` files are excluded. Static symlinks are rejected. This is not a sandbox against a hostile process changing filesystem paths during a transfer.
 
-Local content must be unchanged across two scans before an upload. The engine compares content hashes, not metadata timestamps; metadata coercion therefore cannot decide which file wins. Transfers run sequentially, recheck both sides, retain observed versions, and verify the destination before saving a baseline. Polling fetches all selected source content from the game via `getAllFiles`, so this initial implementation is intended for modest script workspaces, not large telemetry archives.
+Local content must be unchanged across two scans before an upload. The engine compares content hashes, not metadata timestamps; metadata coercion therefore cannot decide which file wins. Transfers run sequentially, recheck both sides, retain observed versions, and verify the destination before saving a baseline. Polling fetches all script/text content from the game server via `getAllFiles` and then filters the supported paths locally, so this initial implementation is intended for modest script workspaces, not large telemetry archives.
 
 State and recovery copies live in `<scripts-root>/.bun-burner/`. Add that directory to your scripts repository's `.gitignore`. Recovery JSON files retain the original `filename`, `side`, and `content`. When `[sync:conflict]` appears, compare both files and the recovery copies, then make both sides match your chosen content. A later scan recognizes agreement. Tracked files missing from only one side stay conflicted; no automatic deletion or restoration occurs.
 
@@ -139,9 +159,9 @@ The first synchronization target is an editor-independent local connector. Savin
 
 ### Preserve original source
 
-Transfer `.js`, `.ts`, `.jsx`, and `.tsx` files with their original names and source text in both directions. For example, local `home/dashboard.tsx` should map to `dashboard.tsx` on the game server `home`, without producing a `.js` counterpart. The folder mapping is configured as described above.
+Transfer `.js`, `.ts`, `.jsx`, and `.tsx` files with their original names and source text in both directions. For example, with `BUN_BURNER_SYNC_ROOT=./scripts` and server `home`, local `scripts/dashboard.tsx` maps to `dashboard.tsx` on `home`, without producing a `.js` counterpart. The folder mapping is configured as described above.
 
-Bitburner supports TypeScript and React/JSX natively, as documented in the [3.0.1 TypeScript and React guide](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/Documentation/doc/en/programming/typescript_react.md). The planned sync engine will not require an external transpilation or bundling step. The game still handles source execution internally.
+Bitburner supports TypeScript and React/JSX natively, as documented in the [3.0.1 TypeScript and React guide](https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/Documentation/doc/en/programming/typescript_react.md). The sync engine does not perform external transpilation or bundling. The game still handles source execution internally.
 
 External editor support should provide Netscript declarations, compatible React globals and JSX types, and no-emit type-checking. Game scripts must use imports that resolve inside Bitburner. Arbitrary npm dependencies, Node/Bun APIs, and editor-only path aliases are not made available in the game by synchronizing source files.
 
@@ -149,13 +169,14 @@ External editor support should provide Netscript declarations, compatible React 
 
 The engine records a last-synchronized content hash for each server and filename. Content comparison determines changes; timestamps alone do not decide which version wins.
 
-| State relative to the synchronization baseline | Intended action |
+| State relative to the synchronization baseline | Action |
 | --- | --- |
-| Only the local file changed | Upload |
-| Only the game file changed | Download |
+| Both files exist; only the local file changed | Upload |
+| Both files exist; only the game file changed | Download |
 | Both now contain identical content | Update the baseline |
 | Both changed differently | Preserve both versions and report a conflict |
 | Neither changed | Do nothing |
+| A tracked file is missing on only one side | Report a conflict; do not delete or restore |
 
 On first connection, different files on both sides have no common baseline and must not be silently overwritten. Missing files require separate creation/deletion handling: absence alone is not permission to delete the other copy. Rename and deletion propagation come after these rules are tested.
 
