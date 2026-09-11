@@ -2,7 +2,7 @@
 
 A local Bun/TypeScript bridge that synchronizes original source files between an external editor and Bitburner through its Remote API.
 
-**Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Opt-in two-way source synchronization is implemented on this development branch. Deletion propagation and manual transfer commands remain deferred.
+**Current status:** the RPC foundation and all eleven typed Remote API methods are implemented. Opt-in two-way source synchronization is implemented on `main`. Deletion propagation and manual transfer commands remain deferred.
 
 ## Why Bun Burner?
 
@@ -39,7 +39,7 @@ Bun Burner also has an unusual success condition: if improvements to Bitburner o
 
 ## Run
 
-Local checks use Bun 1.4.2 and TypeScript 7.0.2. The API targets Bitburner 3.0.1; live verification currently covers filename listing, not game-file synchronization.
+Local checks use Bun 1.4.2 and TypeScript 7.0.2. The API targets Bitburner 3.0.1; guarded live testing has verified source-file synchronization against the Steam public build 23272653 on Fedora 44 KDE.
 
 ```bash
 bun install --frozen-lockfile
@@ -52,7 +52,7 @@ In Bitburner, open **Options → Remote API**, use hostname `127.0.0.1` and port
 
 Bun loads `.env` automatically. `BUN_BURNER_HOST` defaults to `127.0.0.1` and `BUN_BURNER_PORT` to `12525`; no file is required for these defaults. `.env` is ignored by Git. On PowerShell, use `Copy-Item .env.example .env`. Restart after changes and match the game settings to the chosen port. Invalid settings fail at startup. TLS/WSS is not configured.
 
-By default, the bridge listens on `ws://127.0.0.1:12525`. Each connection triggers one `getFileNames` request for `home` and prints the returned filenames. With sync disabled (the default), it does not write, delete, or execute game files. Enabling sync allows source uploads and local downloads; it never deletes or executes game files. Only run one bridge instance on this port; an address-in-use error usually means another instance is still running.
+By default, the bridge listens on `ws://127.0.0.1:12525`. Connections report their status without automatically listing game files. With sync disabled (the default), it does not write, delete, or execute game files. Enabling sync allows source uploads and local downloads; it never deletes or executes game files. Only run one bridge instance on this port; an address-in-use error usually means another instance is still running.
 
 ## Current functionality
 
@@ -129,9 +129,9 @@ bun test
 
 The tests cover response ordering, errors, disconnects, timeouts and late replies, send and serialization failures, malformed envelopes, all eleven result validators, and configuration. Compile-time checks reject unknown method names and missing required parameters.
 
-A real local WebSocket test verifies uploads and downloads through the typed RPC layer using a simulated game and disposable directories. Sync also has tests for conflicts, missing files, restart baselines, stale reads, failed writes, locking, path guards, and source-text preservation. Live game synchronization has not been tested.
+A real local WebSocket test verifies uploads and downloads through the typed RPC layer using a simulated game and disposable directories. Sync also has tests for conflicts, missing files, restart baselines, stale reads, failed writes, locking, path guards, and source-text preservation. Guarded live testing additionally verified local create/update, manual in-game create/update, source preservation, conflicts and recovery copies, identical-file upload suppression, and persisted baselines across a harness process restart.
 
-A live `getFileNames` round trip against Bitburner succeeded, including after reconnecting with the typed API layer. File contents, metadata, and remote-error recovery have been tested with simulated responses, not live game requests. The newly completed methods, including writes and save export, have only been tested with simulated responses. No live game writes were performed.
+All eleven typed methods returned valid results in guarded live tests on Bitburner 3.0.1 (Steam public build 23272653). Writes and deletion tests were restricted to disposable fixtures; original gameplay scripts remained unchanged. Save export was checked for its response shape, not restore validity. The source-transfer checks exercised the production core and file adapters through a restricted test harness. A separate live run of the normal `bun run start` entrypoint verified startup, connection ownership, pause on a workspace-lock failure, recovery after reconnect, persisted-baseline restart, and graceful shutdown with lock release. Unchanged files produced no transfer events after restart. These checks do not establish race-free simultaneous editing; the user also confirmed Zed-to-game and game-to-Zed saves using relative and absolute roots on Fedora 44 KDE. Cleanup checks verified absence at the time of the test; they are not a guarantee against later recreation by another editor or sync session.
 
 ## Feature status
 
@@ -173,7 +173,8 @@ BUN_BURNER_SYNC_ROOT=/absolute/path/to/your/game-scripts
 | `BUN_BURNER_SYNC_ENABLED` | `false` | Enable transfers with `true` |
 | `BUN_BURNER_SYNC_ROOT` | `./scripts` | Existing local source directory |
 | `BUN_BURNER_SYNC_SERVER` | `home` | Destination game server |
- Relative paths are resolved from the directory where you launch the app. The folder must exist. Its contents map directly to the selected game server: `lib/example.ts` becomes `lib/example.ts` on `home`; do not add a `home/` directory unless you want it in the game path.
+
+Relative paths are resolved from the directory where you launch the app. The folder must exist. It is validated when Bitburner connects and synchronization initializes, not when the listener first starts. Normal startup never creates a missing configured root. If the root disappears or becomes inaccessible, sync pauses; the diagnostic identifies the configured root and affected path, explains how to check the directory/permissions, and directs you to restart and reconnect. Local disappearance never implies remote deletion. Already-missing lock cleanup is benign; other cleanup failures remain errors. Its contents map directly to the selected game server: `lib/example.ts` becomes `lib/example.ts` on `home`; do not add a `home/` directory unless you want it in the game path.
 
 Restart with `bun run start`, then reconnect Bitburner. The default `scripts/` folder is separate from connector code, and its contents are ignored by this repository's Git rules. `.gitkeep` only ensures the empty folder is included in a clone.
 
@@ -183,7 +184,7 @@ Local content must be unchanged across two scans before an upload. The engine co
 
 State and recovery copies live in `<scripts-root>/.bun-burner/`. Add that directory to your scripts repository's `.gitignore`. Recovery JSON files retain the original `filename`, `side`, and `content`. When `[sync:conflict]` appears, compare both files and the recovery copies, then make both sides match your chosen content. A later scan recognizes agreement. Tracked files missing from only one side stay conflicted; no automatic deletion or restoration occurs.
 
-A scan/transfer error pauses sync while leaving the connection open. Fix the cause and manually disconnect/reconnect to resume. Do not delete the state directory to resolve a conflict: doing so removes the common baseline. One sync connection/process may own a workspace at a time. Normal shutdown releases its lock; after a crash, inspect `<scripts-root>/.bun-burner/lock` and confirm the recorded process is no longer running before removing the stale lock.
+A scan/transfer error pauses sync while leaving the connection open. Fix the cause, stop and restart Bun Burner, then use Connect in the game to resume. The tested Steam 3.0.1 UI provides no Disconnect control. Do not delete the state directory to resolve a conflict: doing so removes the common baseline. One sync connection/process may own a workspace at a time. Normal shutdown releases its lock; after a crash, inspect `<scripts-root>/.bun-burner/lock` and confirm the recorded process is no longer running before removing the stale lock.
 
 The baseline is bound to the selected server name, but the Remote API does not give this workflow an authenticated save identity. Use separate script roots for different game saves and do not connect another save to an existing workspace without reviewing both sides.
 
@@ -363,3 +364,8 @@ Contributions that improve Bun Burner are welcome. Contributions that identify a
 
 Bun Burner's original code is licensed under [MIT](LICENSE). The bundled `NetscriptDefinitions.d.ts` remains under Bitburner's own [Apache 2.0 with Commons Clause license](types/BITBURNER-LICENSE.txt), not MIT. See [game definition provenance](types/README.md) for its source and version.
 
+## Platform validation
+
+v0.1 support and validation currently target the **Steam desktop version of Bitburner only**. Browser/web builds are not yet supported or validated; this is not a claim that they are broken. Browser integration remains future work.
+
+The first beta targets Linux and Windows. Linux filesystem regressions are tested on Fedora 44 KDE with Bun 1.4.2. Windows is a target, not yet a validated supported platform: run the same `bun test` and type checks plus manual filesystem tests on real Windows before release signoff. The POSIX permission-denial fixture explicitly skips on Windows (where ACL testing is required) and when running as root; diagnostic-code tests still run everywhere.
