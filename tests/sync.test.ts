@@ -124,7 +124,7 @@ test("real local storage preserves text, locks the root, and rejects escaping pa
     const state = new Map([["nested/a.ts", "a".repeat(64)]]);
     await local.save(state); expect(await local.load()).toEqual(state);
     await rejects(local.write("../escape.ts", "bad"));
-    await symlink(outside, join(root, "escape"));
+    await symlink(outside, join(root, "escape"), process.platform === "win32" ? "junction" : "dir");
     await rejects(local.write("escape/a.ts", "bad"), /Symlinks/);
     await rejects(local.snapshot(), /Symlinks/);
     await rejects((await LocalFiles.create(root, "other")).load(), /different game server/);
