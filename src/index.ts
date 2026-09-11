@@ -1,3 +1,4 @@
+import { BitburnerClient } from "./bitburner/client.ts";
 import { RpcClient } from "./rpc/client.ts";
 
 interface ConnectionData {
@@ -22,7 +23,8 @@ const server = Bun.serve({
       const rpc = new RpcClient(ws);
       ws.data.rpc = rpc;
 
-      void rpc.call("getFileNames", { server: "home" })
+      const bitburner = new BitburnerClient(rpc);
+      void bitburner.call("getFileNames", { server: "home" })
         .then((files) => console.log(JSON.stringify(files, null, 2)))
         .catch((error: unknown) => console.error("getFileNames failed:", error));
     },
