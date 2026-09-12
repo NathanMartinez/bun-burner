@@ -11,6 +11,7 @@
   },
   "scripts": {
     "verify": "bun run tools/verify.ts",
+    "verify:push": "bun run tools/verify-push.ts",
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test": "bun test",
