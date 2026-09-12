@@ -10,6 +10,7 @@
     "typescript": "^7"
   },
   "scripts": {
+    "verify": "bun run tools/verify.ts",
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test": "bun test",
