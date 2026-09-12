@@ -4,13 +4,15 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { rejects } from 'node:assert/strict';
+import { denyWindowsWrites } from './fixtures/windows-acl.ts';
 
 async function until(check:()=>boolean){const deadline=Date.now()+4000;while(!check()){if(Date.now()>deadline)throw new Error('Entrypoint test timed out');await Bun.sleep(10);}}
-for(const mode of ["disabled", "missing", "permission"] as const) {
+for(const mode of ["disabled", "missing", "permission", "windows-acl"] as const) {
   const enabled = mode !== "disabled";
   const skipPermission = mode === "permission" && (process.platform === "win32" || process.getuid?.() === 0);
-  test.skipIf(skipPermission)(`normal entrypoint sends no startup smoke RPC (${mode})`,async()=>{
-    const parent=await mkdtemp(join(tmpdir(),'bb-entrypoint-test-'));const root=mode === 'permission' ? parent : join(parent,'missing');
+  test.skipIf(skipPermission || (mode === 'windows-acl' && process.platform !== 'win32'))(`normal entrypoint sends no startup smoke RPC (${mode})`,async()=>{
+    const parent=await mkdtemp(join(tmpdir(),'bb-entrypoint-test-'));const root=mode === 'permission' || mode === 'windows-acl' ? parent : join(parent,'missing');
+    const restore = mode === 'windows-acl' ? await denyWindowsWrites(root) : undefined;
     if(mode === 'permission') await chmod(root,0o555);
     const reservation=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response('test')});
     const port=reservation.port;reservation.stop(true);
@@ -30,13 +32,17 @@ for(const mode of ["disabled", "missing", "permission"] as const) {
       await until(()=>stdout.includes('Bitburner connected'));
       if(enabled){
         await until(()=>stderr.includes('Sync paused'));
-        expect(stderr).toContain(root);expect(stderr).toContain(mode === 'permission' ? 'EACCES' : 'ENOENT');expect(stderr).toContain('BUN_BURNER_SYNC_ROOT');
+        expect(stderr).toContain(root);
+        if (mode === 'windows-acl') expect(stderr).toMatch(/EACCES|EPERM/);
+        else expect(stderr).toContain(mode === 'permission' ? 'EACCES' : 'ENOENT');
+        expect(stderr).toContain('BUN_BURNER_SYNC_ROOT');
         expect(stderr).toContain('restart Bun Burner');expect(stderr).not.toContain('at async');
       }
       await Bun.sleep(150);expect(messages).toEqual([]);
-      if(mode !== 'permission') await rejects(lstat(root));
+      if(mode === 'disabled' || mode === 'missing') await rejects(lstat(root));
+      else await rejects(lstat(join(root, '.bun-burner')));
     }finally{
-      socket?.close();proc.kill();await proc.exited;await Promise.all(streams);if(mode === 'permission') await chmod(parent,0o700);await rm(parent,{recursive:true,force:true});
+      socket?.close();proc.kill();await proc.exited;await Promise.all(streams);await restore?.();if(mode === 'permission') await chmod(parent,0o700);await rm(parent,{recursive:true,force:true});
     }
   },10000);
 }

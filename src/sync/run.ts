@@ -39,6 +39,7 @@ export async function runSync(
   const engine = new SyncEngine(local, new RemoteFiles(api, options.server), local, report);
   const stop = () => engine.stop();
   signal.addEventListener("abort", stop, { once: true });
+  let failed = false;
   try {
     while (!signal.aborted) {
       await engine.tick();
@@ -49,9 +50,14 @@ export async function runSync(
         if (signal.aborted) done();
       });
     }
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
     engine.stop();
     signal.removeEventListener("abort", stop);
-    await release();
+    // Cleanup must not replace the failure that paused synchronization.
+    try { await release(); }
+    catch (error) { if (!failed) throw error; }
   }
 }
