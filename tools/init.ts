@@ -54,10 +54,8 @@ Next steps:
    (the default address; use your configured host/port if changed).`);
 }
 
-if (import.meta.main) {
-  try { await main(Bun.argv.slice(2)); }
-  catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
-  }
+try { await main(Bun.argv.slice(2)); }
+catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
 }

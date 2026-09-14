@@ -16,7 +16,7 @@ test('verified push stops at failures and pushes normally only after every check
   const ok = async (args: string[]) => { const result = await run(args); if (result.code) throw new Error(result.output); return result.output.trim(); };
   try {
     await mkdir(join(root, 'tools'), { recursive: true });
-    for (const name of ['verify.ts', 'verify-push.ts']) {
+    for (const name of ['verify.ts', 'verification.ts', 'verify-push.ts']) {
       await copyFile(new URL(`../tools/${name}`, import.meta.url), join(root, 'tools', name));
     }
     await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {
@@ -41,6 +41,7 @@ test('fixture', async () => { await appendFile('checks.log', 'test\\n'); });
     await ok(['git', 'add', 'change.txt']); await ok(['git', 'commit', '-m', 'pending']);
 
     await writeFile(join(root, 'change.txt'), 'trailing whitespace   \n');
+    expect((await run([process.execPath, 'run', 'tools/verify.ts'])).code).not.toBe(0);
     expect((await run([process.execPath, 'run', 'tools/verify-push.ts'])).code).not.toBe(0);
     expect(await Bun.file(join(root, 'checks.log')).exists()).toBe(false);
     expect(await ok(['git', '--git-dir', remote, 'rev-parse', 'refs/heads/main'])).toBe(original);

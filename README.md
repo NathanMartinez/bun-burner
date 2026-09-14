@@ -573,6 +573,7 @@ src/
 tools/
   init.ts                small initialization CLI
   verify.ts              cross-platform release verification
+  verification.ts        shared verification checks
   verify-push.ts         verified push convenience command
 
 tests/
