@@ -73,17 +73,17 @@ If the project helps improve the Bitburner ecosystem enough that Bun Burner is n
 
 1. Create a focused development branch from `main`.
 2. Install dependencies with `bun install --frozen-lockfile`.
-3. Copy `.env.example` to `.env` if you need custom settings. Synchronization defaults to disabled.
+3. Run `bun run init` to create `.env` from `.env.example` if absent. Existing configuration is preserved; new configuration defaults to sync disabled.
 4. Make the smallest complete change and document public behavior in JSDoc. Update the README when setup, supported behavior, or usability changes.
 5. Run the checks below and open a pull request explaining the problem, resulting behavior, and validation.
 
 ```sh
-bun run typecheck
-bun run typecheck:game
-bun test
+bun run verify
 ```
 
 Use `bun run start` to launch the Bun adapter. Keep commits focused; separate tests when they remain understandable independently. Dependency changes should include the updated Bun lockfile; do not hand-edit it.
+
+`verify` runs the diff check, tests and all three typechecks. `bun run verify:push` runs verification before a normal non-force push; ordinary `git push` remains available.
 
 ## Tests and game data
 

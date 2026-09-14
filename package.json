@@ -1,5 +1,12 @@
 {
   "name": "bun-burner",
+  "version": "0.1.0-beta.1",
+  "description": "Source-preserving two-way synchronization for Bitburner.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NathanMartinez/bun-burner.git"
+  },
   "module": "src/index.ts",
   "type": "module",
   "private": true,

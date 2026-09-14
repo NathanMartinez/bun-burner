@@ -4,7 +4,7 @@
 
 https://github.com/bitburner-official/bitburner-src/blob/v3.0.1/src/ScriptEditor/NetscriptDefinitions.d.ts
 
-SHA-256: `bfabb0f495cc89133ba042420f5d6d514c7f068502565e3bc5f90da5e60242ed`
+SHA-256 of the repository blob (LF line endings): `bfabb0f495cc89133ba042420f5d6d514c7f068502565e3bc5f90da5e60242ed`. Git may convert line endings in a Windows checkout, changing the working-file hash without changing the repository blob.
 
 The accompanying upstream license is preserved in `BITBURNER-LICENSE.txt`. It applies to the upstream declarations; it does not select a license for this connector's original code.
 
