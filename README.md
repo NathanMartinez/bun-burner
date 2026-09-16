@@ -40,7 +40,7 @@ No required transpilation. No required bundling. No automatic deletion propagati
 - [Game types and editor setup](#-game-types-and-editor-setup)
 - [Verification and development](#-verification-and-development)
 - [Roadmap](#-roadmap)
-- [Contributing](#-community-and-contributing)
+- [Community and contributing](#-community-and-contributing)
 - [Project philosophy](#-project-philosophy)
 - [License](#-license)
 
@@ -432,6 +432,7 @@ Bun Burner is an independent community project built against Bitburner's Remote 
 - [Bitburner source repository](https://github.com/bitburner-official/bitburner-src)
 - [Play Bitburner in the browser](https://bitburner-official.github.io/)
 - [Bitburner on Steam](https://store.steampowered.com/app/1812820/Bitburner/)
+- [Official Bitburner community Discord](https://discord.gg/TFc3hKD) — the broader Bitburner community; for Bun Burner questions and feedback, use [GitHub Discussions](https://github.com/NathanMartinez/bun-burner/discussions).
 - [Official Remote API documentation and community tools](https://github.com/bitburner-official/bitburner-src/blob/dev/src/Documentation/doc/en/programming/remote_api.md)
 - [Bitburner 3.0.1 release](https://github.com/bitburner-official/bitburner-src/releases/tag/v3.0.1)
 
@@ -679,7 +680,15 @@ See [ROADMAP.md](./ROADMAP.md).
 
 ## 🤝 Community and contributing
 
-Feedback is welcome from:
+Questions, ideas, feedback, testing reports, and contributions are welcome.
+
+**Not sure where to start?**
+
+- 💬 [GitHub Discussions](https://github.com/NathanMartinez/bun-burner/discussions) — ask questions, suggest ideas, share feedback, or discuss where Bun Burner should go next.
+- 🐛 [GitHub Issues](https://github.com/NathanMartinez/bun-burner/issues) — report reproducible bugs or track concrete work.
+- 🤝 [CONTRIBUTING.md](./CONTRIBUTING.md) — development setup and contribution guidance.
+
+Feedback is especially welcome from:
 
 - Bitburner players;
 - Bitburner maintainers and contributors;
@@ -688,6 +697,10 @@ Feedback is welcome from:
 - browser-version users;
 - editor-extension authors;
 - anyone interested in breaking the beta in useful, reproducible ways.
+
+**Tried Bun Burner and decided not to use it? That feedback is useful too.** If setup was confusing, something felt cumbersome, or the project simply did not fit your workflow, consider starting a [Discussion](https://github.com/NathanMartinez/bun-burner/discussions) and telling us where you stopped.
+
+Feature ideas do not need to arrive as implementation plans. GitHub Discussions is the preferred place for early ideas and open-ended design conversations. Once an idea becomes concrete and actionable, it can move into an issue.
 
 Issues, bug reports, compatibility reports, feature discussions, documentation improvements, and pull requests are welcome.
 
@@ -707,7 +720,7 @@ observe
 → remove the workaround when no longer needed
 ```
 
-Start with:
+For project development and design:
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [Design philosophy](./docs/design-philosophy.md)
