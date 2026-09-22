@@ -7,11 +7,13 @@
     "type": "git",
     "url": "git+https://github.com/NathanMartinez/bun-burner.git"
   },
-  "module": "./dist/core.js",
+  "module": "./dist/app.js",
   "type": "module",
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/node": "^22",
+    "@types/ws": "^8.18.1",
     "typescript": "^7"
   },
   "scripts": {
@@ -27,12 +29,12 @@
     "prepack": "npm run build",
     "test:package": "node tools/test-package.mjs"
   },
-  "main": "./dist/core.js",
-  "types": "./dist/core.d.ts",
+  "main": "./dist/app.js",
+  "types": "./dist/app.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/core.d.ts",
-      "import": "./dist/core.js"
+      "types": "./dist/app.d.ts",
+      "import": "./dist/app.js"
     },
     "./core": {
       "types": "./dist/core.d.ts",
@@ -40,9 +42,17 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "bunburner.config.jsonc"
   ],
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "ws": "^8.21.3"
+  },
+  "bin": {
+    "bun-burner": "./dist/index.js"
   }
 }

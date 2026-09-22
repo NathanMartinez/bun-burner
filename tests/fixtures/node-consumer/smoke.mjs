@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import * as core from "bun-burner";
-import * as subpath from "bun-burner/core";
+import * as application from "bun-burner";
+import * as core from "bun-burner/core";
 
 assert.equal(globalThis.Bun, undefined);
 assert.equal(spawnSync("bun", ["--version"]).error?.code, "ENOENT");
 assert.deepEqual(Object.keys(core).sort(), ["BitburnerClient", "RemoteFiles", "RpcClient", "SyncEngine"]);
-for (const key of Object.keys(core)) assert.equal(core[key], subpath[key]);
+assert.deepEqual(Object.keys(application), ["createBunBurner"]);
 await assert.rejects(import("bun-burner/dist/core.js"), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
 
 const game = new Map([["hello.ts", "export const hello = 1;"]]);

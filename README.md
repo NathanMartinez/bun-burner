@@ -32,6 +32,7 @@ No required transpilation. No required bundling. No automatic deletion propagati
 - [Quick start](#-quick-start)
 - [Install Bun](#1-install-bun)
 - [Configuration](#-configuration)
+- [Local package, CLI, and application API](#local-package-cli-and-application-api)
 - [How syncing works](#-how-syncing-works)
 - [Safety and conflicts](#-safety-and-conflicts)
 - [Validation status](#-validation-status)
@@ -177,7 +178,37 @@ Bun Burner does not configure TLS/WSS.
 
 ## ⚙️ Configuration
 
-Bun loads `.env` automatically.
+The canonical file is `bunburner.config.jsonc` in the directory where you launch
+Bun Burner. It is optional, supports comments and trailing commas, and uses these
+keys:
+
+```jsonc
+{
+  "root": "./scripts", // must exist before sync starts
+  "server": "home",
+  "host": "127.0.0.1",
+  "port": 12525,
+  "sync": false,
+  "debug": false
+}
+```
+
+Configuration precedence, from lowest to highest:
+
+1. Built-in defaults.
+2. `bunburner.config.jsonc`, or the file selected by `--config` / `options.config`.
+3. Optional `.env` values in the current working directory.
+4. Environment variables.
+5. CLI flags.
+6. Explicit programmatic options passed to `createBunBurner()`.
+
+The application reads `.env` without modifying `process.env`; it is never required.
+Bun may also populate its process environment before execution. The portable
+`/core` entrypoint loads neither configuration files nor `.env`.
+An absent default JSONC file is fine; an explicitly selected missing file,
+malformed JSONC, unknown file option, or invalid effective value is an error.
+Relative config paths and roots resolve from the launch directory, including when
+the config file is in another directory. The factory does not read process argv.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -186,6 +217,7 @@ Bun loads `.env` automatically.
 | `BUN_BURNER_SYNC_ENABLED` | `false` | Enables source synchronization when set to `true` |
 | `BUN_BURNER_SYNC_ROOT` | `./scripts` | Existing local source directory to synchronize |
 | `BUN_BURNER_SYNC_SERVER` | `home` | Bitburner server mapped to the local workspace |
+| `BUN_BURNER_DEBUG` | `false` | Prints resolved lifecycle configuration on start |
 
 Example:
 
@@ -796,43 +828,113 @@ Cloud-backed roots such as OneDrive are **unvalidated and non-blocking** for thi
 
 Those gaps are intentional targets for community testing rather than hidden assumptions.
 
-## Local core package
+## Local package, CLI, and application API
 
-The runtime-independent `src/core.ts` API can be installed from a local npm
-tarball. Nothing is published; `private: true` remains set. Node.js 22 or newer
-is required for the Node consumer. The existing Bun CLI still runs from this
-checkout with `bun run start`; the tarball contains only the compiled core,
-its declarations, package metadata, README, and license.
+This package is **local-only for now**: nothing has been published, and
+`private: true` remains set. Install the tarball before using the commands below;
+do not expect a registry installation of this work. Node.js 22+ is the supported
+Node baseline. Bun can run the same compiled CLI and application.
 
 ```sh
+# In this checkout:
 bun install
 npm run build
 npm pack --dry-run
 npm pack
-# In a separate Node project:
+
+# In a separate consumer project:
 npm install /absolute/path/to/bun-burner-0.1.0-beta.1.tgz
+npx --offline bun-burner --help
 ```
+
+After local installation, `npx bun-burner` and `bunx bun-burner` resolve the
+installed bin and launch the same CLI. Its shebang selects Node; use
+`bunx --bun bun-burner` to explicitly run it with Bun. In this checkout,
+`bun run start` still launches `src/index.ts`.
+
+```sh
+npx --offline bun-burner --root ./scripts --server home --sync
+bunx --bun bun-burner --config ./bunburner.config.jsonc --no-sync
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--root <path>` | Existing local sync directory; default `./scripts` |
+| `--server <name>` | Game server; default `home` |
+| `--host <host>` | Hostname or IP without a URL scheme or port; default `127.0.0.1` |
+| `--port <number>` | Integer from 1 through 65535; default `12525` |
+| `--config <path>` | Explicit JSONC config path |
+| `--sync` / `--no-sync` | Enable or disable sync |
+| `--debug` / `--no-debug` | Enable or disable lifecycle diagnostics |
+| `--help`, `-h` | Print help without loading configuration or starting a listener |
+| `--version`, `-v` | Print the package version without starting anything |
+
+Unknown flags, positional arguments, and conflicting positive/negative flags
+are rejected. SIGINT and SIGTERM stop the application and release its workspace
+lock after the current operation settles.
 
 ```js
-import { RpcClient, BitburnerClient, SyncEngine, RemoteFiles } from "bun-burner";
-// The same API is also available from "bun-burner/core".
+import { createBunBurner } from "bun-burner";
+
+const app = await createBunBurner({
+  root: "./src",
+  host: "127.0.0.1",
+  port: 12525,
+  sync: false,
+  debug: false,
+});
+
+try {
+  await app.start();
+  console.log(await app.status());
+} finally {
+  await app.stop();
+}
 ```
 
-The package provides contracts and logic, not a listening server or filesystem
-adapter. Supply an `RpcTransport` to `RpcClient`, and `FileStore`/`SyncState`
-implementations to `SyncEngine`. Importing the package starts no server.
-There are no runtime or peer dependencies. TypeScript is a development-only
-build dependency; consumers execute emitted ESM JavaScript.
+`createBunBurner()` also accepts no arguments. Construction reads and validates
+configuration, resolves the root to an absolute path, and composes adapters.
+It opens no listener, starts no sync, writes no files, and installs no signal
+handlers. `config: false` disables JSONC discovery; environment and optional
+`.env` settings still apply. Explicit options override them.
+
+`start()` and `stop()` are idempotent and serialized; a stopped instance may be
+restarted, and a failed bind may be retried. `status()` returns `state`
+(`stopped`, `starting`, `running`, or `stopping`), the connection count, sync state
+(`disabled`, `idle`, `running`, or `paused`), and an immutable resolved `config`.
+Sync state `running` includes initialization and scanning; it does not promise a
+completed transfer. Root existence and workspace locking are checked when a game
+connects with sync enabled, preserving the existing CLI behavior. Errors pause
+sync until disconnect; there is no automatic retry of uncertain remote writes.
+
+The root export contains only the factory and its public types. Portable
+primitives remain separate:
+
+```js
+import { RpcClient, BitburnerClient, SyncEngine, RemoteFiles } from "bun-burner/core";
+```
+
+The application uses Node-compatible HTTP/filesystem APIs and `ws` on both Node
+and Bun. JSONC is parsed by `jsonc-parser`. These are the package's two runtime
+dependencies; `/core` imports neither and remains free of Node/Bun APIs.
+TypeScript and all ambient types remain development dependencies. The internal
+host interface is deliberately small; there is no public adapter registration
+API in this pass.
 
 `npm run test:package` builds and checks the pack file list, creates a tarball,
-installs it offline into a fresh temporary consumer, checks all public types
-with NodeNext resolution and no ambient Bun types, and exercises both public
-imports, RPC, remote files, and sync hashing under Node with Bun absent from PATH.
-The temporary fixture and tarball are retained at the printed path for inspection.
-On Linux with Bubblewrap and system Node in `/usr/bin`, run
-`npm run test:package -- --isolate` to additionally run the consumer in a minimal
-filesystem containing system binaries and the fixture, without the host home
-or Bun installation. The fixture checks that the Bun executable is unavailable.
+installs it and its dependencies into a fresh temporary consumer, checks public
+types with NodeNext resolution and no ambient Bun types, audits the emitted
+core dependency graph, and exercises core imports, the application, and the
+packed CLI under Node. Dependency installation requires registry access or a
+populated npm cache. The temporary consumer and tarball are retained at the
+printed path.
 
-The package build compiles only the dependency graph rooted at `src/core.ts`.
-It does not transform any user gameplay scripts or alter the CLI sync workflow.
+On Linux with Bubblewrap and system Node in `/usr/bin`, use
+`npm run test:package -- --isolate --bun` to additionally exercise the installed
+application and CLI in a filesystem without the host home or Bun installation,
+and run the packed CLI with Bun. The sync fixtures use disposable directories
+and a simulated game. This does not establish new Windows or live-game
+acceptance coverage.
+
+The package build emits ESM JavaScript and declarations for the application,
+CLI, and core. It never transforms user gameplay scripts.

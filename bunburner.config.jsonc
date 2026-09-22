@@ -1,0 +1,10 @@
+{
+  // Paths resolve from the directory where Bun Burner is launched.
+  "root": "./scripts",
+  "server": "home",
+  "host": "127.0.0.1",
+  "port": 12525,
+  // Sync remains opt-in. The root must exist before a game connects.
+  "sync": false,
+  "debug": false
+}
