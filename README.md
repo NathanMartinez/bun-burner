@@ -795,3 +795,44 @@ macOS has not yet been validated.
 Cloud-backed roots such as OneDrive are **unvalidated and non-blocking** for this beta. Compatibility reports using disposable or backed-up scripts are welcome.
 
 Those gaps are intentional targets for community testing rather than hidden assumptions.
+
+## Local core package
+
+The runtime-independent `src/core.ts` API can be installed from a local npm
+tarball. Nothing is published; `private: true` remains set. Node.js 22 or newer
+is required for the Node consumer. The existing Bun CLI still runs from this
+checkout with `bun run start`; the tarball contains only the compiled core,
+its declarations, package metadata, README, and license.
+
+```sh
+bun install
+npm run build
+npm pack --dry-run
+npm pack
+# In a separate Node project:
+npm install /absolute/path/to/bun-burner-0.1.0-beta.1.tgz
+```
+
+```js
+import { RpcClient, BitburnerClient, SyncEngine, RemoteFiles } from "bun-burner";
+// The same API is also available from "bun-burner/core".
+```
+
+The package provides contracts and logic, not a listening server or filesystem
+adapter. Supply an `RpcTransport` to `RpcClient`, and `FileStore`/`SyncState`
+implementations to `SyncEngine`. Importing the package starts no server.
+There are no runtime or peer dependencies. TypeScript is a development-only
+build dependency; consumers execute emitted ESM JavaScript.
+
+`npm run test:package` builds and checks the pack file list, creates a tarball,
+installs it offline into a fresh temporary consumer, checks all public types
+with NodeNext resolution and no ambient Bun types, and exercises both public
+imports, RPC, remote files, and sync hashing under Node with Bun absent from PATH.
+The temporary fixture and tarball are retained at the printed path for inspection.
+On Linux with Bubblewrap and system Node in `/usr/bin`, run
+`npm run test:package -- --isolate` to additionally run the consumer in a minimal
+filesystem containing system binaries and the fixture, without the host home
+or Bun installation. The fixture checks that the Bun executable is unavailable.
+
+The package build compiles only the dependency graph rooted at `src/core.ts`.
+It does not transform any user gameplay scripts or alter the CLI sync workflow.

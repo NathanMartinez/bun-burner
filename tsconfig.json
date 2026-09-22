@@ -1,4 +1,5 @@
 {
+  "exclude": ["tests/fixtures/node-consumer"],
   "include": ["src/**/*.ts", "tests/**/*.ts", "tools/**/*.ts"],
   "compilerOptions": {
     // Environment setup & latest features

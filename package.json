@@ -7,13 +7,11 @@
     "type": "git",
     "url": "git+https://github.com/NathanMartinez/bun-burner.git"
   },
-  "module": "src/index.ts",
+  "module": "./dist/core.js",
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
+    "@types/bun": "latest",
     "typescript": "^7"
   },
   "scripts": {
@@ -24,6 +22,27 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test": "bun test",
     "typecheck:core": "tsc -p tsconfig.core.json",
-    "typecheck:game": "tsc -p tsconfig.game.json"
+    "typecheck:game": "tsc -p tsconfig.game.json",
+    "build": "node tools/build.mjs",
+    "prepack": "npm run build",
+    "test:package": "node tools/test-package.mjs"
+  },
+  "main": "./dist/core.js",
+  "types": "./dist/core.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
   }
 }

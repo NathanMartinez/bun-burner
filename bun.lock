@@ -6,8 +6,6 @@
       "name": "bun-burner",
       "devDependencies": {
         "@types/bun": "latest",
-      },
-      "peerDependencies": {
         "typescript": "^7",
       },
     },

@@ -1,0 +1,5 @@
+{
+  "name": "bun-burner-node-consumer",
+  "private": true,
+  "type": "module"
+}
